@@ -62,7 +62,7 @@ enum Job {
     Text(PathBuf, u32, Reply<Vec<TextRun>>),
     Outline(PathBuf, Reply<Vec<OutlineItem>>),
     Search(PathBuf, String, usize, Reply<Vec<SearchHit>>),
-    Close(PathBuf),
+    Close(PathBuf, Reply<()>),
 }
 
 /// Handle to the PDFium worker thread.
@@ -145,9 +145,10 @@ impl PdfEngine {
         self.call(|r| Job::Search(path.to_path_buf(), query.to_string(), limit, r))
     }
 
-    /// Drop a cached open document (e.g. before its file is evicted).
+    /// Drop a cached open document (e.g. before its file is deleted).
+    /// Waits until the worker has released the file handle.
     pub fn close(&self, path: &Path) {
-        let _ = self.tx.send(Job::Close(path.to_path_buf()));
+        let _ = self.call(|r| Job::Close(path.to_path_buf(), r));
     }
 }
 
@@ -190,8 +191,9 @@ fn worker(pdfium: &'static Pdfium, rx: mpsc::Receiver<Job>) {
             Job::Search(path, q, limit, reply) => {
                 let _ = reply.send(doc(pdfium, &mut docs, &path).map(|d| search(d, &q, limit)));
             }
-            Job::Close(path) => {
+            Job::Close(path, reply) => {
                 docs.pop(&path);
+                let _ = reply.send(Ok(()));
             }
         }
     }

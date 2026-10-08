@@ -109,9 +109,11 @@ pub fn enforce_cache_cap(state: &AppState, keep: Option<&str>) -> CmdResult<()> 
 }
 
 pub fn remove_cached_file(state: &AppState, path: &Path) {
+    // Release open handles first: Windows cannot delete open files.
     if let Ok(pdf) = &state.pdf {
         pdf.close(path);
     }
+    state.epubs.lock().unwrap().clear();
     if let Err(e) = std::fs::remove_file(path) {
         if e.kind() != std::io::ErrorKind::NotFound {
             tracing::warn!("could not delete cached file: {e}");

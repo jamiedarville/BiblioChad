@@ -225,7 +225,8 @@ async fn apply_changes(
                     new_folders.push(target);
                 }
                 progressed = true;
-            } else if f.is_folderish() || known {
+            } else {
+                // Its parent may be a folder that appears later in this batch.
                 rest.push(f);
             }
         }
