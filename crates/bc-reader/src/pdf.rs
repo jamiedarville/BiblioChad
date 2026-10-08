@@ -85,12 +85,17 @@ impl PdfEngine {
         thread::Builder::new()
             .name("pdfium".into())
             .spawn(move || {
+                // Keep the error from the explicit path: falling back to the
+                // system search would otherwise hide why it failed.
                 let bindings = match &lib_dir {
                     Some(dir) => {
-                        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(dir))
-                            .or_else(|_| Pdfium::bind_to_system_library())
+                        let path = Pdfium::pdfium_platform_library_name_at_path(dir);
+                        Pdfium::bind_to_library(&path)
+                            .map_err(|e| format!("{}: {e}", path.display()))
                     }
-                    None => Pdfium::bind_to_system_library(),
+                    None => Pdfium::bind_to_system_library().map_err(|e| {
+                        format!("not found next to the app or on the system path ({e})")
+                    }),
                 };
                 match bindings {
                     Ok(b) => {

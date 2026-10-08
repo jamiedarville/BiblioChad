@@ -10,6 +10,9 @@
     "core:window:allow-is-fullscreen",
     "dialog:allow-open",
     "dialog:allow-save",
-    "opener:allow-open-url"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://console.cloud.google.com/*" }]
+    }
   ]
 }

@@ -46,32 +46,39 @@ fn init_logging(paths: &AppPaths) {
     }
 }
 
-/// Where to look for pdfium: `PDFIUM_DIR`, the bundled resources folder,
-/// then next to the executable.
-fn pdfium_dir(app: &tauri::App) -> Option<PathBuf> {
-    let lib_name = if cfg!(windows) {
-        "pdfium.dll"
-    } else if cfg!(target_os = "macos") {
-        "libpdfium.dylib"
-    } else {
-        "libpdfium.so"
-    };
+/// Folders that may hold pdfium: `PDFIUM_DIR`, the bundled resources
+/// folder (the installers put it in `<install dir>\pdfium\`), then next to
+/// the executable.
+fn pdfium_candidates(app: &tauri::App) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(d) = std::env::var("PDFIUM_DIR") {
         candidates.push(PathBuf::from(d));
     }
     if let Ok(res) = app.path().resource_dir() {
-        candidates.push(res.join("resources").join("pdfium"));
         candidates.push(res.join("pdfium"));
+        candidates.push(res.join("resources").join("pdfium"));
         candidates.push(res);
     }
     if let Some(exe_dir) = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(PathBuf::from))
     {
+        candidates.push(exe_dir.join("pdfium"));
         candidates.push(exe_dir);
     }
-    candidates.into_iter().find(|d| d.join(lib_name).exists())
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|d| seen.insert(d.clone()));
+    candidates
+}
+
+fn pdfium_lib_name() -> &'static str {
+    if cfg!(windows) {
+        "pdfium.dll"
+    } else if cfg!(target_os = "macos") {
+        "libpdfium.dylib"
+    } else {
+        "libpdfium.so"
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -92,7 +99,16 @@ pub fn run() {
             };
             init_logging(&paths);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), data = %paths.root.display(), "starting BiblioChad");
-            let state = AppState::init(paths, pdfium_dir(app).as_deref())?;
+            let candidates = pdfium_candidates(app);
+            let found = candidates.iter().find(|d| d.join(pdfium_lib_name()).exists()).cloned();
+            let mut state = AppState::init(paths, found.as_deref())?;
+            if let (Err(e), None) = (&state.pdf, &found) {
+                let searched: Vec<String> = candidates.iter().map(|d| d.display().to_string()).collect();
+                state.pdf = Err(format!("{e}. {} was not found in: {}", pdfium_lib_name(), searched.join("; ")));
+            }
+            if let Err(e) = &state.pdf {
+                tracing::error!("PDF engine unavailable: {e}");
+            }
             // Files passed on the command line ("Open with BiblioChad", or
             // the file association) are imported, and the first is opened.
             let mut first = None;

@@ -157,7 +157,7 @@
           </p>
           <div class="row">
             <button class="primary" onclick={importClientJson}>Import client JSON…</button>
-            <button class="ghost" onclick={() => openUrl('https://console.cloud.google.com/apis/credentials')}>Open Google Cloud console</button>
+            <button class="ghost" onclick={() => openUrl('https://console.cloud.google.com/apis/credentials').catch((e) => toasts.push('error', `Could not open the browser: ${errorMessage(e)}`))}>Open Google Cloud console</button>
           </div>
         {:else if !status.connected}
           <p>Connect to choose the Drive folder that becomes your library. Access is read-only; BiblioChad never changes your books.</p>

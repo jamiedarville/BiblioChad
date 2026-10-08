@@ -50,9 +50,6 @@ impl AppState {
         let lib = Arc::new(Library::open(&paths.db())?);
         let device_id = lib.device_id()?;
         let pdf = PdfEngine::start(pdfium_dir).map_err(|e| e.to_string());
-        if let Err(e) = &pdf {
-            tracing::error!("PDF engine unavailable: {e}");
-        }
         let http = reqwest::Client::builder()
             .user_agent(concat!("BiblioChad/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(15))

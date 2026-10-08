@@ -99,10 +99,20 @@ jobs:
           npm ci
           npm --prefix ui ci
           npx tauri build --target aarch64-pc-windows-msvc
+      - name: Portable zip (exe + pdfium side by side)
+        shell: pwsh
+        run: |
+          $p = "portable\BiblioChad"
+          New-Item -ItemType Directory -Force -Path "$p\pdfium" | Out-Null
+          Copy-Item target\aarch64-pc-windows-msvc\release\bibliochad.exe $p
+          Copy-Item src-tauri\resources\pdfium\pdfium.dll "$p\pdfium\"
+          Copy-Item src-tauri\resources\pdfium\PDFIUM_LICENSE.txt "$p\pdfium\" -ErrorAction SilentlyContinue
+          Copy-Item THIRD_PARTY_NOTICES.md $p
+          Compress-Archive -Path $p -DestinationPath portable\BiblioChad-portable-arm64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: bibliochad-windows-arm64
           path: |
             target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
             target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
-            target/aarch64-pc-windows-msvc/release/bibliochad.exe
+            portable/BiblioChad-portable-arm64.zip
