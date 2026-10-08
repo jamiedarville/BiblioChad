@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/mascot.svg" width="120" alt="BiblioChad mascot: a jawline with glasses"></p>
+<p align="center"><img src="assets/cover.jpg" alt="BiblioChad comic cover: Chad in glasses, arms crossed, in a library. Finish the book. No excuses."></p>
 
 # BiblioChad
 

@@ -362,7 +362,7 @@
         </div>
       {:else if !book}
         <div class="center">
-          <img src="/mascot.svg" alt="" width="72" height="72" class="bob" />
+          <img src="/chad.png" alt="" width="72" height="72" class="bob" />
           <p>{loading}</p>
           {#if download}
             <div class="dl"><div style:width="{download.total ? (download.done / download.total) * 100 : 30}%"></div></div>

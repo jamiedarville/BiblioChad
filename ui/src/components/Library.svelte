@@ -167,7 +167,7 @@
 <div class="library">
   <header>
     <div class="brand">
-      <img src="/mascot.svg" alt="" width="36" height="36" />
+      <img src="/chad.png" alt="" width="36" height="36" class="logo" />
       <div>
         <h1>{greeting(chad, overview?.stats.streak_days ?? 0)}</h1>
         {#if overview && chad && overview.has_books}
@@ -273,7 +273,7 @@
     {:else if !loading}
       {#if overview && !overview.has_books}
         <div class="empty">
-          <img src="/mascot.svg" alt="" width="96" height="96" />
+          <img src="/cover.jpg" alt="BiblioChad: Finish the book. No excuses." class="hero" />
           <h2>{empty.title}</h2>
           <p class="muted">{empty.body}</p>
           <div class="row">
@@ -513,6 +513,15 @@
     text-align: center;
     padding: 64px 16px;
     gap: 6px;
+  }
+  .hero {
+    width: min(720px, 100%);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    margin-bottom: 8px;
+  }
+  .logo {
+    border-radius: 8px;
   }
   .empty h2 {
     font-size: 22px;
