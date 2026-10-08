@@ -124,7 +124,13 @@ impl PendingAuth {
             .append_pair("state", &state)
             .append_pair("access_type", "offline")
             .append_pair("prompt", "consent");
-        Ok(Self { auth_url: url.into(), listener, verifier, state, redirect_uri })
+        Ok(Self {
+            auth_url: url.into(),
+            listener,
+            verifier,
+            state,
+            redirect_uri,
+        })
     }
 
     /// Wait for the browser redirect (up to `timeout`), then exchange the
@@ -151,13 +157,13 @@ impl PendingAuth {
         }
         let resp = http.post(&client.token_uri).form(&form).send().await?;
         let tokens = parse_token_response(resp).await?;
-        let refresh = tokens
-            .refresh_token
-            .clone()
-            .ok_or_else(|| DriveError::AuthFailed("Google did not return a refresh token".into()))?;
+        let refresh = tokens.refresh_token.clone().ok_or_else(|| {
+            DriveError::AuthFailed("Google did not return a refresh token".into())
+        })?;
         store.save(&refresh)?;
         let auth = Auth::new(client.clone(), http.clone());
-        auth.set_access(tokens.access_token, tokens.expires_in).await;
+        auth.set_access(tokens.access_token, tokens.expires_in)
+            .await;
         Ok(auth)
     }
 
@@ -178,13 +184,21 @@ impl PendingAuth {
                 }
             }
             let req = String::from_utf8_lossy(&buf[..n]);
-            let target = req.lines().next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("/");
+            let target = req
+                .lines()
+                .next()
+                .and_then(|l| l.split_whitespace().nth(1))
+                .unwrap_or("/");
             let url = url::Url::parse(&format!("http://127.0.0.1{target}"))
                 .map_err(|e| DriveError::AuthFailed(e.to_string()))?;
             let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
             if params.is_empty() {
                 // favicon.ico and friends.
-                let _ = sock.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                let _ = sock
+                    .write_all(
+                        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
                 continue;
             }
             let result = if let Some(err) = params.get("error") {
@@ -196,7 +210,11 @@ impl PendingAuth {
             } else {
                 Err(DriveError::AuthFailed("no code in redirect".into()))
             };
-            let page = if result.is_ok() { SUCCESS_PAGE } else { FAILURE_PAGE };
+            let page = if result.is_ok() {
+                SUCCESS_PAGE
+            } else {
+                FAILURE_PAGE
+            };
             let head = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                 page.len()
@@ -228,7 +246,9 @@ async fn parse_token_response(resp: reqwest::Response) -> Result<TokenResponse> 
         Ok(e) => Err(DriveError::AuthFailed(format!(
             "{}{}",
             e.error,
-            e.error_description.map(|d| format!(": {d}")).unwrap_or_default()
+            e.error_description
+                .map(|d| format!(": {d}"))
+                .unwrap_or_default()
         ))),
         Err(_) => Err(DriveError::Api {
             status: status.as_u16(),
@@ -251,7 +271,13 @@ struct AuthInner {
 
 impl Auth {
     pub fn new(client: OAuthClient, http: reqwest::Client) -> Self {
-        Self { inner: Arc::new(AuthInner { client: Some(client), http, access: Mutex::new(None) }) }
+        Self {
+            inner: Arc::new(AuthInner {
+                client: Some(client),
+                http,
+                access: Mutex::new(None),
+            }),
+        }
     }
 
     /// A fixed token that never refreshes (tests, tooling).
@@ -260,7 +286,10 @@ impl Auth {
             inner: Arc::new(AuthInner {
                 client: None,
                 http: reqwest::Client::new(),
-                access: Mutex::new(Some((token.into(), Instant::now() + Duration::from_secs(10 * 365 * 86400)))),
+                access: Mutex::new(Some((
+                    token.into(),
+                    Instant::now() + Duration::from_secs(10 * 365 * 86400),
+                ))),
             }),
         }
     }
@@ -287,7 +316,11 @@ impl Auth {
                 return Ok(t.clone());
             }
         }
-        let client = self.inner.client.as_ref().ok_or(DriveError::ReauthRequired)?;
+        let client = self
+            .inner
+            .client
+            .as_ref()
+            .ok_or(DriveError::ReauthRequired)?;
         let refresh = store.load()?.ok_or(DriveError::NotConnected)?;
         let mut form = vec![
             ("client_id", client.client_id.as_str()),
@@ -297,13 +330,20 @@ impl Auth {
         if let Some(s) = &client.client_secret {
             form.push(("client_secret", s));
         }
-        let resp = self.inner.http.post(&client.token_uri).form(&form).send().await?;
+        let resp = self
+            .inner
+            .http
+            .post(&client.token_uri)
+            .form(&form)
+            .send()
+            .await?;
         match parse_token_response(resp).await {
             Ok(t) => {
                 if let Some(r) = &t.refresh_token {
                     store.save(r)?;
                 }
-                let ttl = Duration::from_secs(t.expires_in.unwrap_or(3600).saturating_sub(60).max(30));
+                let ttl =
+                    Duration::from_secs(t.expires_in.unwrap_or(3600).saturating_sub(60).max(30));
                 *guard = Some((t.access_token.clone(), Instant::now() + ttl));
                 Ok(t.access_token)
             }
@@ -319,7 +359,13 @@ impl Auth {
     pub async fn revoke(&self, store: &dyn TokenStore) -> Result<()> {
         if let (Some(client), Some(t)) = (self.inner.client.as_ref(), store.load()?) {
             // Best effort: a failure here must not block a local wipe.
-            let _ = self.inner.http.post(&client.revoke_uri).form(&[("token", t.as_str())]).send().await;
+            let _ = self
+                .inner
+                .http
+                .post(&client.revoke_uri)
+                .form(&[("token", t.as_str())])
+                .send()
+                .await;
         }
         store.clear()?;
         *self.inner.access.lock().await = None;
@@ -382,11 +428,22 @@ mod tests {
         let browser = tokio::spawn(async move {
             let http = reqwest::Client::new();
             let _ = http.get(format!("{redirect}/favicon.ico")).send().await;
-            http.get(format!("{redirect}/?state={state}&code=the-code")).send().await.unwrap().text().await.unwrap()
+            http.get(format!("{redirect}/?state={state}&code=the-code"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap()
         });
         let store = MemoryStore::default();
         let auth = pending
-            .finish(&client, &reqwest::Client::new(), &store, Duration::from_secs(10))
+            .finish(
+                &client,
+                &reqwest::Client::new(),
+                &store,
+                Duration::from_secs(10),
+            )
             .await
             .unwrap();
         assert!(browser.await.unwrap().contains("Connected"));
@@ -399,14 +456,22 @@ mod tests {
         let server = MockServer::start().await;
         let client = client_for(&server);
         let pending = PendingAuth::begin(&client).await.unwrap();
-        let q: std::collections::HashMap<_, _> =
-            url::Url::parse(&pending.auth_url).unwrap().query_pairs().into_owned().collect();
+        let q: std::collections::HashMap<_, _> = url::Url::parse(&pending.auth_url)
+            .unwrap()
+            .query_pairs()
+            .into_owned()
+            .collect();
         let redirect = q["redirect_uri"].clone();
         tokio::spawn(async move {
             let _ = reqwest::get(format!("{redirect}/?state=evil&code=x")).await;
         });
         let r = pending
-            .finish(&client, &reqwest::Client::new(), &MemoryStore::default(), Duration::from_secs(10))
+            .finish(
+                &client,
+                &reqwest::Client::new(),
+                &MemoryStore::default(),
+                Duration::from_secs(10),
+            )
             .await;
         assert!(matches!(r, Err(DriveError::AuthFailed(_))));
     }
@@ -437,10 +502,16 @@ mod tests {
 
         let auth = Auth::new(client.clone(), reqwest::Client::new());
         let bad = MemoryStore::with("revoked");
-        assert!(matches!(auth.access_token(&bad).await, Err(DriveError::ReauthRequired)));
+        assert!(matches!(
+            auth.access_token(&bad).await,
+            Err(DriveError::ReauthRequired)
+        ));
         assert_eq!(bad.load().unwrap(), None, "dead token is cleared");
 
         let none = MemoryStore::default();
-        assert!(matches!(auth.access_token(&none).await, Err(DriveError::NotConnected)));
+        assert!(matches!(
+            auth.access_token(&none).await,
+            Err(DriveError::NotConnected)
+        ));
     }
 }

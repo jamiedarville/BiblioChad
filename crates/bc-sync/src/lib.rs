@@ -86,13 +86,15 @@ pub enum SyncError {
     NewerSchema(u32),
 }
 
-
 impl std::fmt::Display for SyncError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SyncError::Json(e) => write!(f, "sync file is not valid JSON: {e}"),
             SyncError::NewerSchema(v) => {
-                write!(f, "sync file uses schema {v}; update BiblioChad on this device")
+                write!(
+                    f,
+                    "sync file uses schema {v}; update BiblioChad on this device"
+                )
             }
         }
     }
@@ -121,7 +123,10 @@ trait Versioned {
 
 impl Versioned for BookEntry {
     fn version(&self) -> (i64, String) {
-        (self.updated_at, format!("{}|{}", self.device_id, self.locator.to_json()))
+        (
+            self.updated_at,
+            format!("{}|{}", self.device_id, self.locator.to_json()),
+        )
     }
 }
 
@@ -129,14 +134,28 @@ impl Versioned for BookmarkEntry {
     fn version(&self) -> (i64, String) {
         // A tombstone beats a live record written at the same instant.
         let ts = self.updated_at.max(self.deleted_at.unwrap_or(i64::MIN));
-        (ts, format!("{}|{}", self.deleted_at.is_some() as u8, serde_json::to_string(self).unwrap()))
+        (
+            ts,
+            format!(
+                "{}|{}",
+                self.deleted_at.is_some() as u8,
+                serde_json::to_string(self).unwrap()
+            ),
+        )
     }
 }
 
 impl Versioned for AnnotationEntry {
     fn version(&self) -> (i64, String) {
         let ts = self.updated_at.max(self.deleted_at.unwrap_or(i64::MIN));
-        (ts, format!("{}|{}", self.deleted_at.is_some() as u8, serde_json::to_string(self).unwrap()))
+        (
+            ts,
+            format!(
+                "{}|{}",
+                self.deleted_at.is_some() as u8,
+                serde_json::to_string(self).unwrap()
+            ),
+        )
     }
 }
 
@@ -179,7 +198,11 @@ pub struct ResumePrompt {
 
 /// Decide whether opening a book should offer to jump to another device's
 /// position: it must be newer than ours and meaningfully different.
-pub fn resume_prompt(local: Option<&BookEntry>, other: &BookEntry, my_device: &str) -> Option<ResumePrompt> {
+pub fn resume_prompt(
+    local: Option<&BookEntry>,
+    other: &BookEntry,
+    my_device: &str,
+) -> Option<ResumePrompt> {
     if other.device_id == my_device {
         return None;
     }
@@ -187,7 +210,8 @@ pub fn resume_prompt(local: Option<&BookEntry>, other: &BookEntry, my_device: &s
         None => other.percent > 0.0,
         Some(l) => {
             other.updated_at > l.updated_at
-                && l.locator.meaningfully_different(&other.locator, l.percent, other.percent)
+                && l.locator
+                    .meaningfully_different(&other.locator, l.percent, other.percent)
         }
     };
     ahead.then(|| ResumePrompt {
@@ -206,7 +230,12 @@ mod tests {
 
     fn pdf(page: u32, ts: i64, dev: &str) -> BookEntry {
         BookEntry {
-            locator: Locator::Pdf { page, offset: 0.0, fit: FitMode::Width, zoom: 1.0 },
+            locator: Locator::Pdf {
+                page,
+                offset: 0.0,
+                fit: FitMode::Width,
+                zoom: 1.0,
+            },
             percent: page as f64 / 500.0,
             status: ReadStatus::Reading,
             updated_at: ts,
@@ -218,7 +247,11 @@ mod tests {
         AnnotationEntry {
             book_key: "drive:1".into(),
             kind: "highlight".into(),
-            locator: Locator::Epub { cfi: "epubcfi(/6/2!/4/2)".into(), href: None, percent: 0.1 },
+            locator: Locator::Epub {
+                cfi: "epubcfi(/6/2!/4/2)".into(),
+                href: None,
+                percent: 0.1,
+            },
             text: Some("spice".into()),
             color: Some("yellow".into()),
             note: Some(note.into()),
@@ -256,8 +289,10 @@ mod tests {
         let mut b = SyncDoc::default();
         a.annotations.insert("x".into(), ann(100, None, "old"));
         b.annotations.insert("x".into(), ann(150, Some(150), "old"));
-        a.annotations.insert("y".into(), ann(300, None, "edited later"));
-        b.annotations.insert("y".into(), ann(200, None, "edited first"));
+        a.annotations
+            .insert("y".into(), ann(300, None, "edited later"));
+        b.annotations
+            .insert("y".into(), ann(200, None, "edited first"));
         let m = merge(&a, &b);
         assert!(m.annotations["x"].deleted_at.is_some(), "deletion survives");
         assert_eq!(m.annotations["y"].note.as_deref(), Some("edited later"));
@@ -266,7 +301,8 @@ mod tests {
         assert_eq!(merge(&b, &a), m);
         // Associative.
         let mut c = SyncDoc::default();
-        c.annotations.insert("x".into(), ann(400, None, "resurrected"));
+        c.annotations
+            .insert("x".into(), ann(400, None, "resurrected"));
         assert_eq!(merge(&merge(&a, &b), &c), merge(&a, &merge(&b, &c)));
     }
 

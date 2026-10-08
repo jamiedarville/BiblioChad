@@ -19,7 +19,11 @@ impl Library {
              GROUP BY c.id ORDER BY c.name COLLATE NOCASE",
         )?;
         let rows = st.query_map([], |r| {
-            Ok(Collection { id: r.get(0)?, name: r.get(1)?, book_count: r.get(2)? })
+            Ok(Collection {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                book_count: r.get(2)?,
+            })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -30,8 +34,15 @@ impl Library {
             return Err(LibraryError::Invalid("collection name is empty".into()));
         }
         let c = self.conn();
-        c.execute("INSERT OR IGNORE INTO collections(name) VALUES (?1)", [name])?;
-        Ok(c.query_row("SELECT id FROM collections WHERE name = ?1", [name], |r| r.get(0))?)
+        c.execute(
+            "INSERT OR IGNORE INTO collections(name) VALUES (?1)",
+            [name],
+        )?;
+        Ok(
+            c.query_row("SELECT id FROM collections WHERE name = ?1", [name], |r| {
+                r.get(0)
+            })?,
+        )
     }
 
     pub fn rename_collection(&self, id: i64, name: &str) -> Result<()> {
@@ -39,12 +50,16 @@ impl Library {
         if name.is_empty() {
             return Err(LibraryError::Invalid("collection name is empty".into()));
         }
-        self.conn().execute("UPDATE collections SET name = ?2 WHERE id = ?1", params![id, name])?;
+        self.conn().execute(
+            "UPDATE collections SET name = ?2 WHERE id = ?1",
+            params![id, name],
+        )?;
         Ok(())
     }
 
     pub fn delete_collection(&self, id: i64) -> Result<()> {
-        self.conn().execute("DELETE FROM collections WHERE id = ?1", [id])?;
+        self.conn()
+            .execute("DELETE FROM collections WHERE id = ?1", [id])?;
         Ok(())
     }
 
@@ -76,13 +91,20 @@ mod tests {
         let dune = lib.book_id_by_key("drive:dune").unwrap().unwrap();
         let moby = lib.book_id_by_key("drive:moby").unwrap().unwrap();
         let c = lib.create_collection(" Favourites ").unwrap();
-        assert_eq!(lib.create_collection("favourites").unwrap(), c, "case-insensitive");
+        assert_eq!(
+            lib.create_collection("favourites").unwrap(),
+            c,
+            "case-insensitive"
+        );
         lib.set_in_collection(c, dune, true).unwrap();
         lib.set_in_collection(c, moby, true).unwrap();
         lib.set_in_collection(c, moby, true).unwrap();
         let cols = lib.collections().unwrap();
         assert_eq!(cols[0].book_count, 2);
-        let q = BookQuery { collection_id: Some(c), ..Default::default() };
+        let q = BookQuery {
+            collection_id: Some(c),
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap().len(), 2);
         lib.set_in_collection(c, moby, false).unwrap();
         assert_eq!(lib.query_books(&q).unwrap().len(), 1);

@@ -3,7 +3,7 @@ name = "bc-drive"
 description = "BiblioChad Google Drive client: OAuth (loopback + PKCE), crawl, changes, downloads"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+publish = false
 
 [dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "http2", "charset"] }

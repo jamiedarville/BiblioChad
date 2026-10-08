@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux · tests, lint, E2E smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev xvfb webkit2gtk-driver
+      - name: PDFium
+        run: scripts/fetch-pdfium.sh linux-x64
+      - name: UI install, typecheck, unit tests, build
+        working-directory: ui
+        run: |
+          npm ci
+          npm run check
+          npm test
+          npm run build
+      - name: Rust format
+        run: cargo fmt --all --check
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Rust tests
+        env:
+          PDFIUM_DIR: ${{ github.workspace }}/src-tauri/resources/pdfium
+        run: |
+          python3 scripts/make-test-corpus.py
+          BC_TEST_PDF=$PWD/test-corpus/chad-test.pdf cargo test --workspace
+      - name: E2E smoke (real app via tauri-driver)
+        env:
+          PDFIUM_DIR: ${{ github.workspace }}/src-tauri/resources/pdfium
+        run: |
+          cargo install tauri-driver --locked
+          cargo build -p bibliochad --features tauri/custom-protocol
+          export BIBLIOCHAD_DATA_DIR=$RUNNER_TEMP/bcdata
+          Xvfb :99 -screen 0 1400x900x24 & export DISPLAY=:99
+          tauri-driver & sleep 2
+          BIBLIOCHAD_APP=$PWD/target/debug/bibliochad E2E_OUT=e2e-out python3 scripts/e2e/smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: e2e-out/
+          if-no-files-found: ignore
+
+  windows-arm64:
+    name: Windows ARM64 · native build + installer
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Toolchain info
+        run: rustc -vV
+      - name: PDFium (win-arm64)
+        shell: pwsh
+        run: .\scripts\fetch-pdfium.ps1 -Platform win-arm64
+      - name: Rust tests
+        shell: pwsh
+        env:
+          PDFIUM_DIR: ${{ github.workspace }}\src-tauri\resources\pdfium
+        run: |
+          python scripts/make-test-corpus.py
+          $env:BC_TEST_PDF = "$PWD\test-corpus\chad-test.pdf"
+          cargo test --workspace --exclude bibliochad
+      - name: Build installer (NSIS + MSI)
+        shell: pwsh
+        run: |
+          npm ci
+          npm --prefix ui ci
+          npx tauri build --target aarch64-pc-windows-msvc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bibliochad-windows-arm64
+          path: |
+            target/aarch64-pc-windows-msvc/release/bundle/nsis/*.exe
+            target/aarch64-pc-windows-msvc/release/bundle/msi/*.msi
+            target/aarch64-pc-windows-msvc/release/bibliochad.exe

@@ -73,7 +73,11 @@ fn source_from_row(r: &Row) -> rusqlite::Result<Source> {
     let kind: String = r.get("kind")?;
     Ok(Source {
         id: r.get("id")?,
-        kind: if kind == "local" { SourceKind::Local } else { SourceKind::Drive },
+        kind: if kind == "local" {
+            SourceKind::Local
+        } else {
+            SourceKind::Drive
+        },
         email: r.get("email")?,
         drive_root_id: r.get("drive_root_id")?,
         name: r.get("name")?,
@@ -139,12 +143,17 @@ impl Library {
     fn local_source_id(&self) -> Result<i64> {
         let c = self.conn();
         if let Some(id) = c
-            .query_row("SELECT id FROM sources WHERE kind = 'local'", [], |r| r.get(0))
+            .query_row("SELECT id FROM sources WHERE kind = 'local'", [], |r| {
+                r.get(0)
+            })
             .optional()?
         {
             return Ok(id);
         }
-        c.execute("INSERT INTO sources(kind, name) VALUES ('local', 'Imported')", [])?;
+        c.execute(
+            "INSERT INTO sources(kind, name) VALUES ('local', 'Imported')",
+            [],
+        )?;
         Ok(c.last_insert_rowid())
     }
 
@@ -157,7 +166,12 @@ impl Library {
         self.conn().execute(
             "UPDATE sources SET changes_page_token = COALESCE(?2, changes_page_token),
                                 crawl_state = ?3, last_synced_at = ?4 WHERE id = ?1",
-            params![source_id, changes_page_token, crawl_state, bc_core::now_ms()],
+            params![
+                source_id,
+                changes_page_token,
+                crawl_state,
+                bc_core::now_ms()
+            ],
         )?;
         Ok(())
     }
@@ -204,7 +218,10 @@ impl Library {
                     BookFormat::detect(n.mime_type.as_deref(), &n.name)
                 };
                 let file_key = format.map(|_| {
-                    format!("drive:{}", n.shortcut_target_id.as_deref().unwrap_or(&n.drive_id))
+                    format!(
+                        "drive:{}",
+                        n.shortcut_target_id.as_deref().unwrap_or(&n.drive_id)
+                    )
                 });
                 up.execute(params![
                     source_id,
@@ -262,7 +279,11 @@ impl Library {
     pub fn is_folder_in_library(&self, folder_id: &str) -> Result<bool> {
         let c = self.conn();
         let root: Option<String> = c
-            .query_row("SELECT drive_root_id FROM sources WHERE kind = 'drive'", [], |r| r.get(0))
+            .query_row(
+                "SELECT drive_root_id FROM sources WHERE kind = 'drive'",
+                [],
+                |r| r.get(0),
+            )
             .optional()?
             .flatten();
         if root.as_deref() == Some(folder_id) {
@@ -346,7 +367,11 @@ impl Library {
              VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(book_key) DO NOTHING",
             params![key, format.as_str(), name, sha256, bc_core::now_ms()],
         )?;
-        Ok(c.query_row("SELECT id FROM books WHERE book_key = ?1", [&key], |r| r.get(0))?)
+        Ok(
+            c.query_row("SELECT id FROM books WHERE book_key = ?1", [&key], |r| {
+                r.get(0)
+            })?,
+        )
     }
 
     pub fn has_local_books(&self) -> Result<bool> {
@@ -373,7 +398,10 @@ impl Library {
         let root_name = source.map(|s| s.name).unwrap_or_else(|| "Library".into());
         let mut crumbs = Vec::new();
         if folder_id == LOCAL_FOLDER_ID {
-            crumbs.push(Breadcrumb { id: LOCAL_FOLDER_ID.into(), name: "Imported".into() });
+            crumbs.push(Breadcrumb {
+                id: LOCAL_FOLDER_ID.into(),
+                name: "Imported".into(),
+            });
             return Ok(crumbs);
         }
         let c = self.conn();
@@ -392,14 +420,20 @@ impl Library {
                 )
                 .optional()?;
             let Some((name, parent)) = hit else { break };
-            crumbs.push(Breadcrumb { id: cur.clone(), name });
+            crumbs.push(Breadcrumb {
+                id: cur.clone(),
+                name,
+            });
             match parent {
                 Some(p) => cur = p,
                 None => break,
             }
         }
         if let Some(r) = root {
-            crumbs.push(Breadcrumb { id: r, name: root_name });
+            crumbs.push(Breadcrumb {
+                id: r,
+                name: root_name,
+            });
         }
         crumbs.reverse();
         Ok(crumbs)
@@ -451,7 +485,12 @@ impl Library {
             });
         }
         let books = self.books_in_folder(&id)?;
-        Ok(FolderListing { breadcrumbs: self.breadcrumbs(&id)?, id, folders, books })
+        Ok(FolderListing {
+            breadcrumbs: self.breadcrumbs(&id)?,
+            id,
+            folders,
+            books,
+        })
     }
 }
 
@@ -518,7 +557,10 @@ mod tests {
         assert_eq!(cl.books.len(), 2);
         let sf = lib.list_folder(Some("sf")).unwrap();
         let dune_id = sf.books.iter().find(|b| b.title == "Dune").unwrap().id;
-        assert!(cl.books.iter().any(|b| b.id == dune_id), "shortcut shares the book row");
+        assert!(
+            cl.books.iter().any(|b| b.id == dune_id),
+            "shortcut shares the book row"
+        );
 
         let root = lib.list_folder(None).unwrap();
         let ext = root.folders.iter().find(|f| f.name == "Elsewhere").unwrap();
@@ -544,14 +586,27 @@ mod tests {
     fn local_imports_get_a_shelf() {
         let (lib, _) = lib_with_tree();
         let id = lib
-            .import_local(std::path::Path::new("/books/Local.epub"), "abc", bc_core::BookFormat::Epub, 10)
+            .import_local(
+                std::path::Path::new("/books/Local.epub"),
+                "abc",
+                bc_core::BookFormat::Epub,
+                10,
+            )
             .unwrap();
         let again = lib
-            .import_local(std::path::Path::new("/books/Local.epub"), "abc", bc_core::BookFormat::Epub, 10)
+            .import_local(
+                std::path::Path::new("/books/Local.epub"),
+                "abc",
+                bc_core::BookFormat::Epub,
+                10,
+            )
             .unwrap();
         assert_eq!(id, again);
         let root = lib.list_folder(None).unwrap();
-        assert!(root.folders.iter().any(|f| f.id == "local:" && f.book_count == 1));
+        assert!(root
+            .folders
+            .iter()
+            .any(|f| f.id == "local:" && f.book_count == 1));
         let local = lib.list_folder(Some("local:")).unwrap();
         assert_eq!(local.books.len(), 1);
         let src = lib.book_source(id).unwrap();

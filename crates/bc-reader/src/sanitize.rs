@@ -11,9 +11,15 @@ fn is_dangerous_attr(key: &str, value: &str) -> bool {
     if k.starts_with("on") {
         return true;
     }
-    let v: String = value.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_ascii_lowercase();
-    matches!(k.as_str(), "href" | "src" | "xlink:href" | "action" | "formaction" | "data")
-        && (v.starts_with("javascript:") || v.starts_with("vbscript:"))
+    let v: String = value
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    matches!(
+        k.as_str(),
+        "href" | "src" | "xlink:href" | "action" | "formaction" | "data"
+    ) && (v.starts_with("javascript:") || v.starts_with("vbscript:"))
 }
 
 fn is_script_element(name: &[u8]) -> bool {
@@ -34,7 +40,10 @@ fn clean_start(e: &BytesStart) -> BytesStart<'static> {
     let mut out = BytesStart::new(name);
     for a in e.attributes().with_checks(false).flatten() {
         let key = String::from_utf8_lossy(a.key.as_ref()).into_owned();
-        let value = a.unescape_value().map(|v| v.into_owned()).unwrap_or_default();
+        let value = a
+            .unescape_value()
+            .map(|v| v.into_owned())
+            .unwrap_or_default();
         if is_dangerous_attr(&key, &value) {
             continue;
         }
@@ -104,7 +113,10 @@ fn sanitize_fallback(input: &[u8]) -> Vec<u8> {
         if lower[i..].starts_with("<script") {
             match lower[i..].find("</script") {
                 Some(end) => {
-                    let close = lower[i + end..].find('>').map(|x| i + end + x + 1).unwrap_or(s.len());
+                    let close = lower[i + end..]
+                        .find('>')
+                        .map(|x| i + end + x + 1)
+                        .unwrap_or(s.len());
                     i = close;
                 }
                 None => break,

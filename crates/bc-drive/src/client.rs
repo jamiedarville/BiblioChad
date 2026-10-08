@@ -134,7 +134,10 @@ pub struct CrawlState {
 
 impl CrawlState {
     pub fn new(root: &str) -> Self {
-        Self { queue: VecDeque::from([root.to_string()]), ..Default::default() }
+        Self {
+            queue: VecDeque::from([root.to_string()]),
+            ..Default::default()
+        }
     }
     pub fn is_done(&self) -> bool {
         self.queue.is_empty()
@@ -245,7 +248,10 @@ impl DriveClient {
                 .ok()
                 .and_then(|v| v["error"]["message"].as_str().map(str::to_string))
                 .unwrap_or_else(|| body.chars().take(300).collect());
-            return Err(DriveError::Api { status: status.as_u16(), message });
+            return Err(DriveError::Api {
+                status: status.as_u16(),
+                message,
+            });
         }
     }
 
@@ -256,7 +262,11 @@ impl DriveClient {
         tokio::time::sleep(Duration::from_millis(ms.min(32_000))).await;
     }
 
-    async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str, query: &[(&str, String)]) -> Result<T> {
+    async fn get_json<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+        query: &[(&str, String)],
+    ) -> Result<T> {
         let resp = self.send(|h| h.get(url).query(query)).await?;
         let bytes = resp.bytes().await?;
         serde_json::from_slice(&bytes).map_err(|e| DriveError::Invalid(e.to_string()))
@@ -265,7 +275,10 @@ impl DriveClient {
     /// The signed-in account's email address.
     pub async fn account_email(&self) -> Result<Option<String>> {
         let v: serde_json::Value = self
-            .get_json(&format!("{}/about", self.api_base), &[("fields", "user(emailAddress)".into())])
+            .get_json(
+                &format!("{}/about", self.api_base),
+                &[("fields", "user(emailAddress)".into())],
+            )
             .await?;
         Ok(v["user"]["emailAddress"].as_str().map(str::to_string))
     }
@@ -285,7 +298,9 @@ impl DriveClient {
             if let Some(t) = &token {
                 q.push(("pageToken", t.clone()));
             }
-            let page: DriveList = self.get_json(&format!("{}/drives", self.api_base), &q).await?;
+            let page: DriveList = self
+                .get_json(&format!("{}/drives", self.api_base), &q)
+                .await?;
             out.extend(page.drives);
             match page.next_page_token {
                 Some(t) => token = Some(t),
@@ -297,14 +312,21 @@ impl DriveClient {
     pub async fn get_file(&self, id: &str) -> Result<DriveFile> {
         self.get_json(
             &format!("{}/files/{}", self.api_base, id),
-            &[("fields", FILE_FIELDS.into()), ("supportsAllDrives", "true".into())],
+            &[
+                ("fields", FILE_FIELDS.into()),
+                ("supportsAllDrives", "true".into()),
+            ],
         )
         .await
     }
 
     /// All non-trashed children of a folder, following pagination. With
     /// `folders_only`, only folders and shortcuts to folders.
-    pub async fn list_children(&self, folder_id: &str, folders_only: bool) -> Result<Vec<DriveFile>> {
+    pub async fn list_children(
+        &self,
+        folder_id: &str,
+        folders_only: bool,
+    ) -> Result<Vec<DriveFile>> {
         let mut q = format!("'{}' in parents and trashed = false", q_escape(folder_id));
         if folders_only {
             q.push_str(&format!(
@@ -329,7 +351,9 @@ impl DriveClient {
             if let Some(t) = &token {
                 params.push(("pageToken", t.clone()));
             }
-            let page: FileList = self.get_json(&format!("{}/files", self.api_base), &params).await?;
+            let page: FileList = self
+                .get_json(&format!("{}/files", self.api_base), &params)
+                .await?;
             out.extend(page.files);
             match page.next_page_token {
                 Some(t) => token = Some(t),
@@ -345,8 +369,13 @@ impl DriveClient {
     /// Crawl one folder from `state.queue` and return its children (with
     /// file shortcuts resolved to their targets' size/md5). Call repeatedly
     /// until [`CrawlState::is_done`]; persist `state` after each call.
-    pub async fn crawl_step(&self, state: &mut CrawlState) -> Result<Option<(String, Vec<DriveFile>)>> {
-        let Some(folder) = state.queue.pop_front() else { return Ok(None) };
+    pub async fn crawl_step(
+        &self,
+        state: &mut CrawlState,
+    ) -> Result<Option<(String, Vec<DriveFile>)>> {
+        let Some(folder) = state.queue.pop_front() else {
+            return Ok(None);
+        };
         if !state.visited.insert(folder.clone()) {
             return Ok(Some((folder, Vec::new())));
         }
@@ -384,8 +413,9 @@ impl DriveClient {
         if let Some(d) = &self.shared_drive_id {
             q.push(("driveId", d.clone()));
         }
-        let v: serde_json::Value =
-            self.get_json(&format!("{}/changes/startPageToken", self.api_base), &q).await?;
+        let v: serde_json::Value = self
+            .get_json(&format!("{}/changes/startPageToken", self.api_base), &q)
+            .await?;
         v["startPageToken"]
             .as_str()
             .map(str::to_string)
@@ -413,7 +443,9 @@ impl DriveClient {
             if let Some(d) = &self.shared_drive_id {
                 params.push(("driveId", d.clone()));
             }
-            let page: ChangeList = self.get_json(&format!("{}/changes", self.api_base), &params).await?;
+            let page: ChangeList = self
+                .get_json(&format!("{}/changes", self.api_base), &params)
+                .await?;
             out.extend(page.changes);
             if let Some(next) = page.next_page_token {
                 token = next;
@@ -437,7 +469,10 @@ impl DriveClient {
     ) -> Result<u64> {
         let url = format!("{}/files/{}", self.api_base, file_id);
         let mut resp = self
-            .send(|h| h.request(Method::GET, &url).query(&[("alt", "media"), ("supportsAllDrives", "true")]))
+            .send(|h| {
+                h.request(Method::GET, &url)
+                    .query(&[("alt", "media"), ("supportsAllDrives", "true")])
+            })
             .await?;
         let total = resp.content_length();
         if let Some(parent) = dest.parent() {
@@ -467,7 +502,10 @@ impl DriveClient {
         if let Some(expected) = expected_md5 {
             if !expected.eq_ignore_ascii_case(&actual) {
                 let _ = tokio::fs::remove_file(&tmp).await;
-                return Err(DriveError::Checksum { expected: expected.into(), actual });
+                return Err(DriveError::Checksum {
+                    expected: expected.into(),
+                    actual,
+                });
             }
         }
         tokio::fs::rename(&tmp, dest).await?;
@@ -492,7 +530,9 @@ impl DriveClient {
     pub async fn fetch_thumbnail(&self, link: &str) -> Result<Vec<u8>> {
         // Ask for a larger rendition than the default 220px.
         let link = match link.rfind("=s") {
-            Some(i) if link[i + 2..].chars().all(|c| c.is_ascii_digit()) => format!("{}=s600", &link[..i]),
+            Some(i) if link[i + 2..].chars().all(|c| c.is_ascii_digit()) => {
+                format!("{}=s600", &link[..i])
+            }
             _ => link.to_string(),
         };
         let resp = self.send(|h| h.get(&link)).await?;
@@ -518,13 +558,20 @@ impl DriveClient {
 
     pub async fn appdata_read(&self, id: &str) -> Result<Vec<u8>> {
         let url = format!("{}/files/{}", self.api_base, id);
-        let resp = self.send(|h| h.get(&url).query(&[("alt", "media")])).await?;
+        let resp = self
+            .send(|h| h.get(&url).query(&[("alt", "media")]))
+            .await?;
         Ok(resp.bytes().await?.to_vec())
     }
 
     /// Create or overwrite a JSON file in `appDataFolder`. This is the only
     /// write BiblioChad ever makes to Drive.
-    pub async fn appdata_write(&self, name: &str, existing_id: Option<&str>, body: Vec<u8>) -> Result<String> {
+    pub async fn appdata_write(
+        &self,
+        name: &str,
+        existing_id: Option<&str>,
+        body: Vec<u8>,
+    ) -> Result<String> {
         #[derive(Deserialize)]
         struct Created {
             id: String,
@@ -562,14 +609,18 @@ impl DriveClient {
                 .await?
             }
         };
-        let c: Created = serde_json::from_slice(&resp.bytes().await?).map_err(|e| DriveError::Invalid(e.to_string()))?;
+        let c: Created = serde_json::from_slice(&resp.bytes().await?)
+            .map_err(|e| DriveError::Invalid(e.to_string()))?;
         Ok(c.id)
     }
 }
 
 fn is_book_like(mime: &str, name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    mime == "application/epub+zip" || mime == "application/pdf" || n.ends_with(".epub") || n.ends_with(".pdf")
+    mime == "application/epub+zip"
+        || mime == "application/pdf"
+        || n.ends_with(".epub")
+        || n.ends_with(".pdf")
 }
 
 #[cfg(test)]
@@ -580,9 +631,16 @@ mod tests {
     use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
     async fn client(server: &MockServer) -> DriveClient {
-        DriveClient::new(reqwest::Client::new(), Auth::fixed("tok"), Arc::new(MemoryStore::default()))
-            .with_base_urls(&format!("{}/drive/v3", server.uri()), &format!("{}/upload/drive/v3", server.uri()))
-            .with_backoff(Duration::from_millis(1))
+        DriveClient::new(
+            reqwest::Client::new(),
+            Auth::fixed("tok"),
+            Arc::new(MemoryStore::default()),
+        )
+        .with_base_urls(
+            &format!("{}/drive/v3", server.uri()),
+            &format!("{}/upload/drive/v3", server.uri()),
+        )
+        .with_backoff(Duration::from_millis(1))
     }
 
     fn file(id: &str, name: &str, mime: &str) -> serde_json::Value {
@@ -628,10 +686,18 @@ mod tests {
     #[tokio::test]
     async fn crawl_handles_pagination_shortcuts_and_cycles() {
         let server = MockServer::start().await;
-        Mock::given(method("GET")).and(path("/drive/v3/files")).respond_with(Tree).mount(&server).await;
+        Mock::given(method("GET"))
+            .and(path("/drive/v3/files"))
+            .respond_with(Tree)
+            .mount(&server)
+            .await;
         Mock::given(method("GET"))
             .and(path("/drive/v3/files/T"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(file("T", "Linked.pdf", "application/pdf")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(file(
+                "T",
+                "Linked.pdf",
+                "application/pdf",
+            )))
             .mount(&server)
             .await;
         let c = client(&server).await;
@@ -650,7 +716,11 @@ mod tests {
             assert!(ids.contains(id), "missing {id}");
         }
         let linked = seen.iter().find(|f| f.id == "scb").unwrap();
-        assert_eq!(linked.md5_checksum.as_deref(), Some("md5T"), "shortcut target resolved");
+        assert_eq!(
+            linked.md5_checksum.as_deref(),
+            Some("md5T"),
+            "shortcut target resolved"
+        );
         assert_eq!(seen.iter().find(|f| f.id == "b1").unwrap().size, Some(1234));
         assert_eq!(state.folders_done, 3);
     }
@@ -664,7 +734,8 @@ mod tests {
                     "error": {"code": self.1, "message": "slow down", "errors": [{"reason": "rateLimitExceeded"}]}
                 }))
             } else {
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"startPageToken": "42"}))
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"startPageToken": "42"}))
             }
         }
     }
@@ -678,7 +749,10 @@ mod tests {
                 .expect(3)
                 .mount(&server)
                 .await;
-            assert_eq!(client(&server).await.start_page_token().await.unwrap(), "42");
+            assert_eq!(
+                client(&server).await.start_page_token().await.unwrap(),
+                "42"
+            );
         }
     }
 
@@ -693,7 +767,10 @@ mod tests {
             .mount(&server)
             .await;
         match client(&server).await.get_file("nope").await {
-            Err(DriveError::Api { status: 404, message }) => assert!(message.contains("File not found")),
+            Err(DriveError::Api {
+                status: 404,
+                message,
+            }) => assert!(message.contains("File not found")),
             other => panic!("unexpected {other:?}"),
         }
     }
@@ -738,13 +815,23 @@ mod tests {
         let dest = dir.path().join("cache/f1.pdf");
         let good = hex::encode(Md5::digest(&body));
         let mut last = 0;
-        let n = c.download_to("f1", &dest, Some(&good), |done, _| last = done).await.unwrap();
+        let n = c
+            .download_to("f1", &dest, Some(&good), |done, _| last = done)
+            .await
+            .unwrap();
         assert_eq!(n as usize, body.len());
         assert_eq!(last as usize, body.len());
         assert_eq!(std::fs::read(&dest).unwrap(), body);
 
         let bad = dir.path().join("cache/bad.pdf");
-        let r = c.download_to("f1", &bad, Some("00000000000000000000000000000000"), |_, _| {}).await;
+        let r = c
+            .download_to(
+                "f1",
+                &bad,
+                Some("00000000000000000000000000000000"),
+                |_, _| {},
+            )
+            .await;
         assert!(matches!(r, Err(DriveError::Checksum { .. })));
         assert!(!bad.exists());
         assert!(!bad.with_extension("part").exists());
@@ -756,7 +843,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/drive/v3/files"))
             .and(query_param("spaces", "appDataFolder"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"files": []})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"files": []})),
+            )
             .mount(&server)
             .await;
         Mock::given(method("POST"))
@@ -773,15 +862,22 @@ mod tests {
             .await;
         Mock::given(method("PATCH"))
             .and(path("/upload/drive/v3/files/new-id"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "new-id"})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "new-id"})),
+            )
             .expect(1)
             .mount(&server)
             .await;
         let c = client(&server).await;
         assert_eq!(c.appdata_find("sync.json").await.unwrap(), None);
-        let id = c.appdata_write("sync.json", None, br#"{"schema":1}"#.to_vec()).await.unwrap();
+        let id = c
+            .appdata_write("sync.json", None, br#"{"schema":1}"#.to_vec())
+            .await
+            .unwrap();
         assert_eq!(id, "new-id");
-        c.appdata_write("sync.json", Some(&id), b"{}".to_vec()).await.unwrap();
+        c.appdata_write("sync.json", Some(&id), b"{}".to_vec())
+            .await
+            .unwrap();
     }
 
     #[test]

@@ -139,7 +139,10 @@ mod tests {
         let p = dir.path().join("db.sqlite");
         crate::Library::open(&p).unwrap();
         let lib = crate::Library::open(&p).unwrap();
-        let v: i64 = lib.conn().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        let v: i64 = lib
+            .conn()
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
         assert_eq!(v as usize, super::MIGRATIONS.len());
     }
 }

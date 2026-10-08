@@ -18,11 +18,15 @@ pub struct KeyringStore {
 
 impl KeyringStore {
     pub fn new(service: &str, user: &str) -> Self {
-        Self { service: service.into(), user: user.into() }
+        Self {
+            service: service.into(),
+            user: user.into(),
+        }
     }
 
     fn entry(&self) -> Result<keyring::Entry> {
-        keyring::Entry::new(&self.service, &self.user).map_err(|e| DriveError::Keyring(e.to_string()))
+        keyring::Entry::new(&self.service, &self.user)
+            .map_err(|e| DriveError::Keyring(e.to_string()))
     }
 }
 
@@ -42,7 +46,9 @@ impl TokenStore for KeyringStore {
     }
 
     fn save(&self, refresh_token: &str) -> Result<()> {
-        self.entry()?.set_password(refresh_token).map_err(|e| DriveError::Keyring(e.to_string()))
+        self.entry()?
+            .set_password(refresh_token)
+            .map_err(|e| DriveError::Keyring(e.to_string()))
     }
 
     fn clear(&self) -> Result<()> {

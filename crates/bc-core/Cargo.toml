@@ -3,7 +3,7 @@ name = "bc-core"
 description = "BiblioChad shared types, errors and paths"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

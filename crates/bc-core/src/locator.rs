@@ -91,7 +91,12 @@ mod tests {
         let l = Locator::from_json(r#"{"kind":"pdf","page":211}"#).unwrap();
         assert_eq!(
             l,
-            Locator::Pdf { page: 211, offset: 0.0, fit: FitMode::Width, zoom: 1.0 }
+            Locator::Pdf {
+                page: 211,
+                offset: 0.0,
+                fit: FitMode::Width,
+                zoom: 1.0
+            }
         );
         assert_eq!(l.label(0.5), "page 212");
     }
@@ -103,9 +108,24 @@ mod tests {
 
     #[test]
     fn meaningful_difference() {
-        let a = Locator::Pdf { page: 10, offset: 0.0, fit: FitMode::Width, zoom: 1.0 };
-        let b = Locator::Pdf { page: 11, offset: 0.5, fit: FitMode::Width, zoom: 1.0 };
-        let c = Locator::Pdf { page: 40, offset: 0.0, fit: FitMode::Width, zoom: 1.0 };
+        let a = Locator::Pdf {
+            page: 10,
+            offset: 0.0,
+            fit: FitMode::Width,
+            zoom: 1.0,
+        };
+        let b = Locator::Pdf {
+            page: 11,
+            offset: 0.5,
+            fit: FitMode::Width,
+            zoom: 1.0,
+        };
+        let c = Locator::Pdf {
+            page: 40,
+            offset: 0.0,
+            fit: FitMode::Width,
+            zoom: 1.0,
+        };
         assert!(!a.meaningfully_different(&b, 0.1, 0.11));
         assert!(a.meaningfully_different(&c, 0.1, 0.4));
     }

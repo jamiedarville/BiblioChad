@@ -53,7 +53,12 @@ type Reply<T> = mpsc::Sender<Result<T>>;
 
 enum Job {
     Info(PathBuf, Reply<PdfInfo>),
-    Render { path: PathBuf, page: u32, width: u32, reply: Reply<Vec<u8>> },
+    Render {
+        path: PathBuf,
+        page: u32,
+        width: u32,
+        reply: Reply<Vec<u8>>,
+    },
     Text(PathBuf, u32, Reply<Vec<TextRun>>),
     Outline(PathBuf, Reply<Vec<OutlineItem>>),
     Search(PathBuf, String, usize, Reply<Vec<SearchHit>>),
@@ -81,10 +86,10 @@ impl PdfEngine {
             .name("pdfium".into())
             .spawn(move || {
                 let bindings = match &lib_dir {
-                    Some(dir) => Pdfium::bind_to_library(
-                        Pdfium::pdfium_platform_library_name_at_path(dir),
-                    )
-                    .or_else(|_| Pdfium::bind_to_system_library()),
+                    Some(dir) => {
+                        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(dir))
+                            .or_else(|_| Pdfium::bind_to_system_library())
+                    }
                     None => Pdfium::bind_to_system_library(),
                 };
                 match bindings {
@@ -100,13 +105,17 @@ impl PdfEngine {
                 }
             })
             .map_err(ReaderError::Io)?;
-        ready_rx.recv().map_err(|_| pdf_err("PDF worker failed to start"))??;
+        ready_rx
+            .recv()
+            .map_err(|_| pdf_err("PDF worker failed to start"))??;
         Ok(Self { tx })
     }
 
     fn call<T>(&self, make: impl FnOnce(Reply<T>) -> Job) -> Result<T> {
         let (rtx, rrx) = mpsc::channel();
-        self.tx.send(make(rtx)).map_err(|_| pdf_err("PDF worker stopped"))?;
+        self.tx
+            .send(make(rtx))
+            .map_err(|_| pdf_err("PDF worker stopped"))?;
         rrx.recv().map_err(|_| pdf_err("PDF worker stopped"))?
     }
 
@@ -116,7 +125,12 @@ impl PdfEngine {
 
     /// Render page `page` (zero-based) at `width` pixels wide, as PNG bytes.
     pub fn render_png(&self, path: &Path, page: u32, width: u32) -> Result<Vec<u8>> {
-        self.call(|reply| Job::Render { path: path.to_path_buf(), page, width, reply })
+        self.call(|reply| Job::Render {
+            path: path.to_path_buf(),
+            page,
+            width,
+            reply,
+        })
     }
 
     pub fn text_runs(&self, path: &Path, page: u32) -> Result<Vec<TextRun>> {
@@ -158,7 +172,12 @@ fn worker(pdfium: &'static Pdfium, rx: mpsc::Receiver<Job>) {
             Job::Info(path, reply) => {
                 let _ = reply.send(doc(pdfium, &mut docs, &path).and_then(info_of));
             }
-            Job::Render { path, page, width, reply } => {
+            Job::Render {
+                path,
+                page,
+                width,
+                reply,
+            } => {
                 let r = doc(pdfium, &mut docs, &path).and_then(|d| render(d, page, width));
                 let _ = reply.send(r);
             }
@@ -179,7 +198,8 @@ fn worker(pdfium: &'static Pdfium, rx: mpsc::Receiver<Job>) {
 }
 
 fn non_empty(s: Option<PdfDocumentMetadataTag>) -> Option<String> {
-    s.map(|t| t.value().trim().to_string()).filter(|v| !v.is_empty())
+    s.map(|t| t.value().trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn info_of(d: &PdfDocument) -> Result<PdfInfo> {
@@ -272,7 +292,11 @@ fn outline_of(d: &PdfDocument) -> Vec<OutlineItem> {
                 .destination()
                 .and_then(|dest| dest.page_index().ok())
                 .map(|i| i as u32);
-            let children = if depth < 32 { walk(b.first_child(), depth + 1) } else { Vec::new() };
+            let children = if depth < 32 {
+                walk(b.first_child(), depth + 1)
+            } else {
+                Vec::new()
+            };
             out.push(OutlineItem {
                 title: b.title().unwrap_or_default().trim().to_string(),
                 page,
@@ -301,7 +325,10 @@ fn search(d: &PdfDocument, query: &str, limit: usize) -> Vec<SearchHit> {
         let n: Vec<char> = needle.chars().collect();
         if hay.len() != orig.len() || n.is_empty() {
             if lower.contains(&needle) {
-                hits.push(SearchHit { page: i as u32, excerpt: needle.clone() });
+                hits.push(SearchHit {
+                    page: i as u32,
+                    excerpt: needle.clone(),
+                });
             }
             continue;
         }
@@ -335,7 +362,9 @@ mod tests {
     /// the library path) and `BC_TEST_PDF` points at a sample PDF.
     #[test]
     fn renders_when_pdfium_present() {
-        let Ok(sample) = std::env::var("BC_TEST_PDF") else { return };
+        let Ok(sample) = std::env::var("BC_TEST_PDF") else {
+            return;
+        };
         let dir = std::env::var("PDFIUM_DIR").ok();
         let engine = match PdfEngine::start(dir.as_deref().map(Path::new)) {
             Ok(e) => e,

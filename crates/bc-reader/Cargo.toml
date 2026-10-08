@@ -3,7 +3,7 @@ name = "bc-reader"
 description = "BiblioChad EPUB package parsing and PDFium wrapper"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+publish = false
 
 [dependencies]
 bc-core = { path = "../bc-core" }

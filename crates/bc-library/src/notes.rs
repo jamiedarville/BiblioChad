@@ -64,7 +64,12 @@ fn annotation_from_row(r: &Row) -> rusqlite::Result<Option<Annotation>> {
 }
 
 impl Library {
-    pub fn add_bookmark(&self, book_id: i64, locator: &Locator, label: Option<&str>) -> Result<Bookmark> {
+    pub fn add_bookmark(
+        &self,
+        book_id: i64,
+        locator: &Locator,
+        label: Option<&str>,
+    ) -> Result<Bookmark> {
         let now = bc_core::now_ms();
         let id = bc_core::new_id();
         self.conn().execute(
@@ -104,7 +109,11 @@ impl Library {
     pub fn add_annotation(&self, book_id: i64, a: &NewAnnotation) -> Result<Annotation> {
         let now = bc_core::now_ms();
         let id = bc_core::new_id();
-        let kind = if a.note.as_deref().is_some_and(|n| !n.trim().is_empty()) { "note" } else { "highlight" };
+        let kind = if a.note.as_deref().is_some_and(|n| !n.trim().is_empty()) {
+            "note"
+        } else {
+            "highlight"
+        };
         self.conn().execute(
             "INSERT INTO annotations(id, book_id, kind, locator_json, text, color, note, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
@@ -123,8 +132,17 @@ impl Library {
         })
     }
 
-    pub fn update_annotation(&self, id: &str, color: Option<&str>, note: Option<&str>) -> Result<()> {
-        let kind = if note.is_some_and(|n| !n.trim().is_empty()) { "note" } else { "highlight" };
+    pub fn update_annotation(
+        &self,
+        id: &str,
+        color: Option<&str>,
+        note: Option<&str>,
+    ) -> Result<()> {
+        let kind = if note.is_some_and(|n| !n.trim().is_empty()) {
+            "note"
+        } else {
+            "highlight"
+        };
         let n = self.conn().execute(
             "UPDATE annotations SET color = COALESCE(?2, color), note = ?3, kind = ?4, updated_at = ?5
              WHERE id = ?1 AND deleted_at IS NULL",
@@ -188,7 +206,10 @@ impl Library {
             out.push_str("## Bookmarks\n\n");
             for m in &marks {
                 let label = m.label.clone().unwrap_or_else(|| "Bookmark".into());
-                out.push_str(&format!("- {label} ({})\n", m.locator.label(position_key(&m.locator))));
+                out.push_str(&format!(
+                    "- {label} ({})\n",
+                    m.locator.label(position_key(&m.locator))
+                ));
             }
         }
         Ok(out)
@@ -211,17 +232,43 @@ mod tests {
     fn notes_and_export() {
         let (lib, _) = lib_with_tree();
         let id = lib.book_id_by_key("drive:dune").unwrap().unwrap();
-        let loc = |p: f64| Locator::Epub { cfi: format!("epubcfi(/6/{})", (p * 100.0) as i32), href: None, percent: p };
+        let loc = |p: f64| Locator::Epub {
+            cfi: format!("epubcfi(/6/{})", (p * 100.0) as i32),
+            href: None,
+            percent: p,
+        };
         let a = lib
-            .add_annotation(id, &NewAnnotation { locator: loc(0.5), text: Some("Fear is the mind-killer.".into()), color: Some("yellow".into()), note: None })
+            .add_annotation(
+                id,
+                &NewAnnotation {
+                    locator: loc(0.5),
+                    text: Some("Fear is the mind-killer.".into()),
+                    color: Some("yellow".into()),
+                    note: None,
+                },
+            )
             .unwrap();
-        lib.add_annotation(id, &NewAnnotation { locator: loc(0.1), text: Some("A beginning".into()), color: None, note: Some("delicate".into()) }).unwrap();
+        lib.add_annotation(
+            id,
+            &NewAnnotation {
+                locator: loc(0.1),
+                text: Some("A beginning".into()),
+                color: None,
+                note: Some("delicate".into()),
+            },
+        )
+        .unwrap();
         let list = lib.annotations(id).unwrap();
         assert_eq!(list.len(), 2);
-        assert_eq!(list[0].text.as_deref(), Some("A beginning"), "sorted by position");
+        assert_eq!(
+            list[0].text.as_deref(),
+            Some("A beginning"),
+            "sorted by position"
+        );
         assert_eq!(list[0].kind, "note");
 
-        lib.update_annotation(&a.id, Some("green"), Some("Litany")).unwrap();
+        lib.update_annotation(&a.id, Some("green"), Some("Litany"))
+            .unwrap();
         let b = lib.add_bookmark(id, &loc(0.3), Some("Arrakis")).unwrap();
         let md = lib.export_annotations_markdown(id).unwrap();
         assert!(md.starts_with("# Dune"));

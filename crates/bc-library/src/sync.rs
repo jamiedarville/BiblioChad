@@ -29,7 +29,9 @@ impl Library {
             })?;
             for row in rows {
                 let (key, loc, percent, status, updated_at, device_id) = row?;
-                let Ok(locator) = Locator::from_json(&loc) else { continue };
+                let Ok(locator) = Locator::from_json(&loc) else {
+                    continue;
+                };
                 let entry = BookEntry {
                     locator,
                     percent,
@@ -38,10 +40,9 @@ impl Library {
                     device_id,
                 };
                 // Deterministic choice when two devices share a timestamp.
-                let replace = doc
-                    .books
-                    .get(&key)
-                    .is_none_or(|e| (e.updated_at, &e.device_id) < (entry.updated_at, &entry.device_id));
+                let replace = doc.books.get(&key).is_none_or(|e| {
+                    (e.updated_at, &e.device_id) < (entry.updated_at, &entry.device_id)
+                });
                 if replace {
                     doc.books.insert(key, entry);
                 }
@@ -65,10 +66,19 @@ impl Library {
             })?;
             for row in rows {
                 let (id, book_key, loc, label, created_at, updated_at, deleted_at) = row?;
-                let Ok(locator) = Locator::from_json(&loc) else { continue };
+                let Ok(locator) = Locator::from_json(&loc) else {
+                    continue;
+                };
                 doc.bookmarks.insert(
                     id,
-                    BookmarkEntry { book_key, locator, label, created_at, updated_at, deleted_at },
+                    BookmarkEntry {
+                        book_key,
+                        locator,
+                        label,
+                        created_at,
+                        updated_at,
+                        deleted_at,
+                    },
                 );
             }
         }
@@ -93,8 +103,21 @@ impl Library {
                 ))
             })?;
             for row in rows {
-                let (id, book_key, kind, loc, text, color, note, created_at, updated_at, deleted_at) = row?;
-                let Ok(locator) = Locator::from_json(&loc) else { continue };
+                let (
+                    id,
+                    book_key,
+                    kind,
+                    loc,
+                    text,
+                    color,
+                    note,
+                    created_at,
+                    updated_at,
+                    deleted_at,
+                ) = row?;
+                let Ok(locator) = Locator::from_json(&loc) else {
+                    continue;
+                };
                 doc.annotations.insert(
                     id,
                     AnnotationEntry {
@@ -127,10 +150,15 @@ impl Library {
         let c = self.conn();
         let book_id = |key: &str| -> rusqlite::Result<Option<i64>> {
             use rusqlite::OptionalExtension;
-            c.query_row("SELECT id FROM books WHERE book_key = ?1", [key], |r| r.get(0)).optional()
+            c.query_row("SELECT id FROM books WHERE book_key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .optional()
         };
         for (id, m) in &doc.bookmarks {
-            let Some(bid) = book_id(&m.book_key)? else { continue };
+            let Some(bid) = book_id(&m.book_key)? else {
+                continue;
+            };
             applied += c.execute(
                 "INSERT INTO bookmarks(id, book_id, locator_json, label, created_at, updated_at, deleted_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -142,7 +170,9 @@ impl Library {
             )?;
         }
         for (id, a) in &doc.annotations {
-            let Some(bid) = book_id(&a.book_key)? else { continue };
+            let Some(bid) = book_id(&a.book_key)? else {
+                continue;
+            };
             applied += c.execute(
                 "INSERT INTO annotations(id, book_id, kind, locator_json, text, color, note, created_at, updated_at, deleted_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
@@ -181,14 +211,31 @@ mod tests {
         let (tablet, _) = lib_with_tree();
         let lid = laptop.book_id_by_key("drive:found").unwrap().unwrap();
         let tid = tablet.book_id_by_key("drive:found").unwrap().unwrap();
-        let page = |p| Locator::Pdf { page: p, offset: 0.0, fit: FitMode::Width, zoom: 1.0 };
+        let page = |p| Locator::Pdf {
+            page: p,
+            offset: 0.0,
+            fit: FitMode::Width,
+            zoom: 1.0,
+        };
 
-        laptop.save_progress(lid, "laptop", &page(10), 0.02, None).unwrap();
+        laptop
+            .save_progress(lid, "laptop", &page(10), 0.02, None)
+            .unwrap();
         let a = laptop
-            .add_annotation(lid, &NewAnnotation { locator: page(3), text: Some("psychohistory".into()), color: None, note: None })
+            .add_annotation(
+                lid,
+                &NewAnnotation {
+                    locator: page(3),
+                    text: Some("psychohistory".into()),
+                    color: None,
+                    note: None,
+                },
+            )
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(3));
-        tablet.save_progress(tid, "tablet", &page(211), 0.42, None).unwrap();
+        tablet
+            .save_progress(tid, "tablet", &page(211), 0.42, None)
+            .unwrap();
 
         // Laptop syncs first (remote empty), then tablet, then laptop again.
         let remote = bc_sync::merge(&Default::default(), &laptop.export_sync_doc().unwrap());

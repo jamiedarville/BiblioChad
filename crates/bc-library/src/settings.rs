@@ -6,7 +6,9 @@ impl Library {
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         Ok(self
             .conn()
-            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0))
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
             .optional()?)
     }
 
@@ -20,7 +22,8 @@ impl Library {
     }
 
     pub fn delete_setting(&self, key: &str) -> Result<()> {
-        self.conn().execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        self.conn()
+            .execute("DELETE FROM settings WHERE key = ?1", [key])?;
         Ok(())
     }
 
@@ -51,6 +54,9 @@ mod tests {
         let id = lib.device_id().unwrap();
         assert_eq!(lib.device_id().unwrap(), id);
         lib.set_setting_json("prefs", &vec![1, 2]).unwrap();
-        assert_eq!(lib.setting_json::<Vec<i32>>("prefs").unwrap(), Some(vec![1, 2]));
+        assert_eq!(
+            lib.setting_json::<Vec<i32>>("prefs").unwrap(),
+            Some(vec![1, 2])
+        );
     }
 }

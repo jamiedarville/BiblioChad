@@ -122,7 +122,10 @@ mod tests {
 
     #[test]
     fn detects_formats() {
-        assert_eq!(BookFormat::detect(Some("application/pdf"), "x"), Some(BookFormat::Pdf));
+        assert_eq!(
+            BookFormat::detect(Some("application/pdf"), "x"),
+            Some(BookFormat::Pdf)
+        );
         assert_eq!(
             BookFormat::detect(Some("application/octet-stream"), "Dune.EPUB"),
             Some(BookFormat::Epub)

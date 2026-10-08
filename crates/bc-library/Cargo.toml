@@ -3,7 +3,7 @@ name = "bc-library"
 description = "BiblioChad SQLite library: schema, queries, metadata and covers"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+publish = false
 
 [dependencies]
 bc-core = { path = "../bc-core" }

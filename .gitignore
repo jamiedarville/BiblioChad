@@ -6,3 +6,4 @@ node_modules/
 !/src-tauri/resources/pdfium/README.md
 *.part
 .DS_Store
+/test-corpus/

@@ -160,7 +160,8 @@ impl Library {
         let mut args: Vec<Value> = Vec::new();
         let mut with = String::new();
         let mut wheres = vec![
-            "EXISTS(SELECT 1 FROM nodes n WHERE n.file_key = b.book_key AND n.is_trashed = 0)".to_string(),
+            "EXISTS(SELECT 1 FROM nodes n WHERE n.file_key = b.book_key AND n.is_trashed = 0)"
+                .to_string(),
         ];
         if let Some(folder) = &q.folder_id {
             args.push(Value::Text(folder.clone()));
@@ -179,9 +180,17 @@ impl Library {
                     .into(),
             );
         }
-        if let Some(s) = q.search.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        if let Some(s) = q
+            .search
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
             for term in s.split_whitespace().take(8) {
-                let escaped = term.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+                let escaped = term
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
                 args.push(Value::Text(format!("%{escaped}%")));
                 let i = args.len();
                 wheres.push(format!(
@@ -197,7 +206,10 @@ impl Library {
         }
         if let Some(s) = q.status {
             args.push(Value::Text(s.as_str().into()));
-            wheres.push(format!("COALESCE(b.status_override, p.status, 'unread') = ?{}", args.len()));
+            wheres.push(format!(
+                "COALESCE(b.status_override, p.status, 'unread') = ?{}",
+                args.len()
+            ));
         }
         if let Some(cid) = q.collection_id {
             args.push(Value::Integer(cid));
@@ -210,7 +222,9 @@ impl Library {
             wheres.push("b.favorite = 1".into());
         }
         if q.cached_only {
-            wheres.push("EXISTS(SELECT 1 FROM cache_entries ce WHERE ce.book_key = b.book_key)".into());
+            wheres.push(
+                "EXISTS(SELECT 1 FROM cache_entries ce WHERE ce.book_key = b.book_key)".into(),
+            );
         }
         let dir = if q.descending { "DESC" } else { "ASC" };
         let order = match q.sort {
@@ -261,7 +275,8 @@ impl Library {
 
     pub fn book_summary(&self, id: i64) -> Result<BookSummary> {
         let c = self.conn();
-        let sql = format!("SELECT {SUMMARY_COLUMNS} FROM books b {LATEST_PROGRESS} WHERE b.id = ?1");
+        let sql =
+            format!("SELECT {SUMMARY_COLUMNS} FROM books b {LATEST_PROGRESS} WHERE b.id = ?1");
         c.query_row(&sql, [id], summary_from_row)
             .optional()?
             .ok_or_else(|| LibraryError::NotFound(format!("book {id}")))
@@ -270,7 +285,9 @@ impl Library {
     pub fn book_id_by_key(&self, key: &str) -> Result<Option<i64>> {
         Ok(self
             .conn()
-            .query_row("SELECT id FROM books WHERE book_key = ?1", [key], |r| r.get(0))
+            .query_row("SELECT id FROM books WHERE book_key = ?1", [key], |r| {
+                r.get(0)
+            })
             .optional()?)
     }
 
@@ -295,7 +312,9 @@ impl Library {
             },
         )?;
         let mut st = c.prepare("SELECT collection_id FROM collection_books WHERE book_id = ?1")?;
-        let collections = st.query_map([id], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+        let collections = st
+            .query_map([id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
         drop(st);
         // Folder path of the first live node holding this book.
         let mut folder_path = Vec::new();
@@ -375,7 +394,12 @@ impl Library {
     }
 
     /// Store metadata extracted from the book file.
-    pub fn apply_metadata(&self, id: i64, md: &BookMetadata, cover_path: Option<&str>) -> Result<()> {
+    pub fn apply_metadata(
+        &self,
+        id: i64,
+        md: &BookMetadata,
+        cover_path: Option<&str>,
+    ) -> Result<()> {
         self.conn().execute(
             "UPDATE books SET title = ?2, author = ?3, series = ?4, series_index = ?5,
                publisher = ?6, language = ?7, isbn = ?8, description = ?9,
@@ -401,22 +425,28 @@ impl Library {
     }
 
     pub fn set_cover_path(&self, id: i64, cover_path: &str) -> Result<()> {
-        self.conn()
-            .execute("UPDATE books SET cover_path = ?2 WHERE id = ?1", params![id, cover_path])?;
+        self.conn().execute(
+            "UPDATE books SET cover_path = ?2 WHERE id = ?1",
+            params![id, cover_path],
+        )?;
         Ok(())
     }
 
     pub fn cover_path(&self, id: i64) -> Result<Option<String>> {
         Ok(self
             .conn()
-            .query_row("SELECT cover_path FROM books WHERE id = ?1", [id], |r| r.get(0))
+            .query_row("SELECT cover_path FROM books WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
             .optional()?
             .flatten())
     }
 
     pub fn set_page_count(&self, id: i64, pages: u32) -> Result<()> {
-        self.conn()
-            .execute("UPDATE books SET page_count = ?2 WHERE id = ?1", params![id, pages])?;
+        self.conn().execute(
+            "UPDATE books SET page_count = ?2 WHERE id = ?1",
+            params![id, pages],
+        )?;
         Ok(())
     }
 
@@ -428,7 +458,11 @@ impl Library {
         author: Option<&str>,
         series: Option<&str>,
     ) -> Result<()> {
-        let norm = |s: Option<&str>| s.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+        let norm = |s: Option<&str>| {
+            s.map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        };
         self.conn().execute(
             "UPDATE books SET title_override = ?2, author_override = ?3, series_override = ?4 WHERE id = ?1",
             params![id, norm(title), norm(author), norm(series)],
@@ -437,13 +471,18 @@ impl Library {
     }
 
     pub fn set_favorite(&self, id: i64, favorite: bool) -> Result<()> {
-        self.conn()
-            .execute("UPDATE books SET favorite = ?2 WHERE id = ?1", params![id, favorite])?;
+        self.conn().execute(
+            "UPDATE books SET favorite = ?2 WHERE id = ?1",
+            params![id, favorite],
+        )?;
         Ok(())
     }
 
     pub fn set_pinned(&self, id: i64, pinned: bool) -> Result<()> {
-        self.conn().execute("UPDATE books SET pinned = ?2 WHERE id = ?1", params![id, pinned])?;
+        self.conn().execute(
+            "UPDATE books SET pinned = ?2 WHERE id = ?1",
+            params![id, pinned],
+        )?;
         Ok(())
     }
 
@@ -469,22 +508,45 @@ mod tests {
         let titles: Vec<_> = all.iter().map(|b| b.title.as_str()).collect();
         assert_eq!(titles, vec!["Dune", "Foundation", "Moby Dick", "Top Level"]);
 
-        let q = BookQuery { search: Some("moby".into()), ..Default::default() };
+        let q = BookQuery {
+            search: Some("moby".into()),
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap().len(), 1);
 
-        let q = BookQuery { search: Some("100%_".into()), ..Default::default() };
-        assert!(lib.query_books(&q).unwrap().is_empty(), "wildcards are escaped");
+        let q = BookQuery {
+            search: Some("100%_".into()),
+            ..Default::default()
+        };
+        assert!(
+            lib.query_books(&q).unwrap().is_empty(),
+            "wildcards are escaped"
+        );
 
-        let q = BookQuery { format: Some(BookFormat::Pdf), ..Default::default() };
+        let q = BookQuery {
+            format: Some(BookFormat::Pdf),
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap().len(), 2);
 
-        let q = BookQuery { folder_id: Some("sf".into()), ..Default::default() };
+        let q = BookQuery {
+            folder_id: Some("sf".into()),
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap().len(), 2);
 
-        let q = BookQuery { sort: SortKey::Title, descending: true, ..Default::default() };
+        let q = BookQuery {
+            sort: SortKey::Title,
+            descending: true,
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap()[0].title, "Top Level");
 
-        let q = BookQuery { limit: Some(2), offset: Some(1), ..Default::default() };
+        let q = BookQuery {
+            limit: Some(2),
+            offset: Some(1),
+            ..Default::default()
+        };
         let page = lib.query_books(&q).unwrap();
         assert_eq!(page.len(), 2);
         assert_eq!(page[0].title, "Foundation");
@@ -493,7 +555,13 @@ mod tests {
     #[test]
     fn metadata_and_overrides() {
         let (lib, _) = lib_with_tree();
-        let dune = lib.query_books(&BookQuery { search: Some("dune".into()), ..Default::default() }).unwrap()[0].id;
+        let dune = lib
+            .query_books(&BookQuery {
+                search: Some("dune".into()),
+                ..Default::default()
+            })
+            .unwrap()[0]
+            .id;
         let md = BookMetadata {
             title: Some("Dune (40th Anniversary)".into()),
             authors: vec!["Frank Herbert".into()],
@@ -501,23 +569,35 @@ mod tests {
             series_index: Some(1.0),
             ..Default::default()
         };
-        lib.apply_metadata(dune, &md, Some("/covers/1.jpg")).unwrap();
+        lib.apply_metadata(dune, &md, Some("/covers/1.jpg"))
+            .unwrap();
         let s = lib.book_summary(dune).unwrap();
         assert_eq!(s.title, "Dune (40th Anniversary)");
         assert_eq!(s.author.as_deref(), Some("Frank Herbert"));
         assert!(s.has_cover);
 
-        lib.set_overrides(dune, Some("Dune"), None, Some("")).unwrap();
+        lib.set_overrides(dune, Some("Dune"), None, Some(""))
+            .unwrap();
         let d = lib.book_details(dune).unwrap();
         assert_eq!(d.summary.title, "Dune");
         assert_eq!(d.summary.series.as_deref(), Some("Dune"));
         assert_eq!(d.folder_path, vec!["Sci-Fi"]);
 
-        let q = BookQuery { sort: SortKey::Author, ..Default::default() };
-        assert_eq!(lib.query_books(&q).unwrap()[0].id, dune, "books with authors sort first");
+        let q = BookQuery {
+            sort: SortKey::Author,
+            ..Default::default()
+        };
+        assert_eq!(
+            lib.query_books(&q).unwrap()[0].id,
+            dune,
+            "books with authors sort first"
+        );
 
         lib.set_favorite(dune, true).unwrap();
-        let q = BookQuery { favorites_only: true, ..Default::default() };
+        let q = BookQuery {
+            favorites_only: true,
+            ..Default::default()
+        };
         assert_eq!(lib.query_books(&q).unwrap().len(), 1);
 
         let src = lib.book_source(dune).unwrap();
@@ -530,7 +610,8 @@ mod tests {
     fn content_change_resets_metadata() {
         let (lib, src) = lib_with_tree();
         let id = lib.book_id_by_key("drive:dune").unwrap().unwrap();
-        lib.apply_metadata(id, &BookMetadata::default(), None).unwrap();
+        lib.apply_metadata(id, &BookMetadata::default(), None)
+            .unwrap();
         lib.upsert_nodes(
             src,
             &[crate::NodeRecord {

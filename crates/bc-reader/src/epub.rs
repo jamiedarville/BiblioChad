@@ -62,7 +62,11 @@ impl EpubArchive {
         if zip.len() > MAX_ENTRIES {
             return Err(ReaderError::BadEpub(format!("{} entries", zip.len())));
         }
-        let mut archive = Self { zip, index: HashMap::new(), entries: Vec::new() };
+        let mut archive = Self {
+            zip,
+            index: HashMap::new(),
+            entries: Vec::new(),
+        };
         for i in 0..archive.zip.len() {
             let f = archive
                 .zip
@@ -76,7 +80,10 @@ impl EpubArchive {
                 tracing::warn!(entry = %name, "skipping unsafe EPUB entry");
                 continue;
             }
-            archive.entries.push(EntryInfo { name: name.clone(), size: f.size() });
+            archive.entries.push(EntryInfo {
+                name: name.clone(),
+                size: f.size(),
+            });
             archive.index.insert(name, i);
         }
         Ok(archive)
@@ -96,8 +103,14 @@ impl EpubArchive {
         if !is_safe_entry_name(name) {
             return Err(ReaderError::UnsafeEntry(name.into()));
         }
-        let idx = *self.index.get(name).ok_or_else(|| ReaderError::NotFound(name.into()))?;
-        let mut f = self.zip.by_index(idx).map_err(|e| ReaderError::BadEpub(e.to_string()))?;
+        let idx = *self
+            .index
+            .get(name)
+            .ok_or_else(|| ReaderError::NotFound(name.into()))?;
+        let mut f = self
+            .zip
+            .by_index(idx)
+            .map_err(|e| ReaderError::BadEpub(e.to_string()))?;
         let compressed = f.compressed_size().max(1);
         let declared = f.size();
         if declared > MAX_ENTRY_BYTES {
@@ -128,7 +141,10 @@ impl EpubArchive {
             .map_err(|_| ReaderError::BadEpub("missing META-INF/container.xml".into()))?;
         let opf_path = find_rootfile(&container)
             .or_else(|| {
-                self.entries.iter().find(|e| e.name.ends_with(".opf")).map(|e| e.name.clone())
+                self.entries
+                    .iter()
+                    .find(|e| e.name.ends_with(".opf"))
+                    .map(|e| e.name.clone())
             })
             .ok_or_else(|| ReaderError::BadEpub("no OPF rootfile".into()))?;
         let opf = self.read_string(&opf_path)?;
@@ -167,7 +183,10 @@ fn find_rootfile(container_xml: &str) -> Option<String> {
         match r.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) if local_name(&e) == "rootfile" => {
                 let mt = attr(&e, "media-type");
-                if mt.as_deref().is_none_or(|m| m == "application/oebps-package+xml") {
+                if mt
+                    .as_deref()
+                    .is_none_or(|m| m == "application/oebps-package+xml")
+                {
                     return attr(&e, "full-path").map(|p| decode_href(&p));
                 }
             }
@@ -178,7 +197,9 @@ fn find_rootfile(container_xml: &str) -> Option<String> {
 }
 
 fn decode_href(href: &str) -> String {
-    percent_encoding::percent_decode_str(href).decode_utf8_lossy().into_owned()
+    percent_encoding::percent_decode_str(href)
+        .decode_utf8_lossy()
+        .into_owned()
 }
 
 /// Resolve `href` (relative to the directory of `base`) to an archive path.
@@ -215,8 +236,13 @@ fn looks_like_isbn(s: &str) -> Option<String> {
         .or_else(|| s.strip_prefix("isbn:"))
         .or_else(|| s.strip_prefix("ISBN "))
         .unwrap_or(s);
-    let digits: String = s.chars().filter(|c| c.is_ascii_digit() || *c == 'X').collect();
-    let only_isbn_chars = s.chars().all(|c| c.is_ascii_digit() || c == '-' || c == ' ' || c == 'X');
+    let digits: String = s
+        .chars()
+        .filter(|c| c.is_ascii_digit() || *c == 'X')
+        .collect();
+    let only_isbn_chars = s
+        .chars()
+        .all(|c| c.is_ascii_digit() || c == '-' || c == ' ' || c == 'X');
     if only_isbn_chars && (digits.len() == 10 || digits.len() == 13) {
         Some(digits)
     } else {
@@ -248,7 +274,9 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
     let mut in_metadata = false;
 
     loop {
-        let ev = r.read_event().map_err(|e| ReaderError::BadEpub(format!("OPF: {e}")))?;
+        let ev = r
+            .read_event()
+            .map_err(|e| ReaderError::BadEpub(format!("OPF: {e}")))?;
         match ev {
             Event::Start(e) => {
                 let name = local_name(&e);
@@ -319,7 +347,9 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
                     current = None;
                     continue;
                 }
-                let Some((cur_name, start)) = current.as_ref() else { continue };
+                let Some((cur_name, start)) = current.as_ref() else {
+                    continue;
+                };
                 if *cur_name != name {
                     continue;
                 }
@@ -335,14 +365,12 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
                         }
                         "publisher" if md.publisher.is_none() => md.publisher = Some(value),
                         "language" if md.language.is_none() => md.language = Some(value),
-                        "description" if md.description.is_none() => {
-                            md.description = Some(value)
-                        }
+                        "description" if md.description.is_none() => md.description = Some(value),
                         "identifier" => identifiers.push((attr(start, "scheme"), value)),
                         "meta" => {
                             let prop = attr(start, "property").unwrap_or_default();
-                            let refines =
-                                attr(start, "refines").map(|r| r.trim_start_matches('#').to_string());
+                            let refines = attr(start, "refines")
+                                .map(|r| r.trim_start_matches('#').to_string());
                             match (prop.as_str(), refines) {
                                 ("belongs-to-collection", _) => {
                                     collections.push((attr(start, "id"), value))
@@ -372,7 +400,9 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
     if let Some((id, name)) = collections
         .iter()
         .find(|(id, _)| {
-            id.as_ref().and_then(|i| refines_type.get(i)).is_none_or(|t| t == "series")
+            id.as_ref()
+                .and_then(|i| refines_type.get(i))
+                .is_none_or(|t| t == "series")
         })
         .cloned()
     {
@@ -385,7 +415,11 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
 
     md.isbn = identifiers
         .iter()
-        .find(|(scheme, _)| scheme.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("isbn")))
+        .find(|(scheme, _)| {
+            scheme
+                .as_deref()
+                .is_some_and(|s| s.eq_ignore_ascii_case("isbn"))
+        })
         .and_then(|(_, v)| looks_like_isbn(v).or(Some(v.clone())))
         .or_else(|| identifiers.iter().find_map(|(_, v)| looks_like_isbn(v)));
 
@@ -399,13 +433,19 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
             cover_id_epub2.as_ref().and_then(|id| {
                 manifest.get(id).map(|m| m.href.clone()).or_else(|| {
                     // Some books put the href in the cover meta instead of an id.
-                    manifest.values().find(|m| m.href.ends_with(id.as_str())).map(|m| m.href.clone())
+                    manifest
+                        .values()
+                        .find(|m| m.href.ends_with(id.as_str()))
+                        .map(|m| m.href.clone())
                 })
             })
         })
         .or_else(|| {
             guide_cover.as_ref().and_then(|g| {
-                manifest.values().find(|m| &m.href == g && is_image(m)).map(|m| m.href.clone())
+                manifest
+                    .values()
+                    .find(|m| &m.href == g && is_image(m))
+                    .map(|m| m.href.clone())
             })
         })
         .or_else(|| {
@@ -421,9 +461,17 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
             candidates.first().map(|(_, m)| m.href.clone())
         });
 
-    let spine = spine_ids.iter().filter_map(|id| manifest.get(id).map(|m| m.href.clone())).collect();
+    let spine = spine_ids
+        .iter()
+        .filter_map(|id| manifest.get(id).map(|m| m.href.clone()))
+        .collect();
 
-    Ok(Package { opf_path: opf_path.to_string(), metadata: md, cover_path, spine })
+    Ok(Package {
+        opf_path: opf_path.to_string(),
+        metadata: md,
+        cover_path,
+        spine,
+    })
 }
 
 /// Best-effort mime type for an archive entry, by extension.
@@ -514,8 +562,14 @@ pub(crate) mod tests {
         assert_eq!(pkg.metadata.series_index, Some(1.0));
         assert_eq!(pkg.metadata.isbn.as_deref(), Some("9780441172719"));
         assert_eq!(pkg.metadata.description.as_deref(), Some("<p>Spice.</p>"));
-        assert_eq!(pkg.cover_path.as_deref(), Some("OEBPS/images/cover art.jpg"));
-        assert_eq!(pkg.spine, vec!["OEBPS/text/ch1.xhtml", "OEBPS/text/ch2.xhtml"]);
+        assert_eq!(
+            pkg.cover_path.as_deref(),
+            Some("OEBPS/images/cover art.jpg")
+        );
+        assert_eq!(
+            pkg.spine,
+            vec!["OEBPS/text/ch1.xhtml", "OEBPS/text/ch2.xhtml"]
+        );
     }
 
     #[test]
@@ -555,7 +609,10 @@ pub(crate) mod tests {
     fn resolves_hrefs() {
         assert_eq!(resolve_href("OEBPS/content.opf", "../a/b.css"), "a/b.css");
         assert_eq!(resolve_href("content.opf", "./x.xhtml#frag"), "x.xhtml");
-        assert_eq!(resolve_href("a/b/c.opf", "../../../../etc/passwd"), "etc/passwd");
+        assert_eq!(
+            resolve_href("a/b/c.opf", "../../../../etc/passwd"),
+            "etc/passwd"
+        );
     }
 
     #[test]
@@ -575,15 +632,24 @@ pub(crate) mod tests {
         make_epub(
             &p,
             EPUB3_OPF,
-            &[("OEBPS/images/cover art.jpg", b"JPEGDATA"), ("../escape.txt", b"nope")],
+            &[
+                ("OEBPS/images/cover art.jpg", b"JPEGDATA"),
+                ("../escape.txt", b"nope"),
+            ],
         );
         let mut a = EpubArchive::open(&p).unwrap();
         assert!(a.contains("OEBPS/content.opf"));
         assert!(!a.entries().iter().any(|e| e.name.contains("..")));
         let pkg = a.package().unwrap();
-        assert_eq!(pkg.cover_path.as_deref(), Some("OEBPS/images/cover art.jpg"));
+        assert_eq!(
+            pkg.cover_path.as_deref(),
+            Some("OEBPS/images/cover art.jpg")
+        );
         assert_eq!(a.read("OEBPS/images/cover art.jpg").unwrap(), b"JPEGDATA");
-        assert!(matches!(a.read("../escape.txt"), Err(ReaderError::UnsafeEntry(_))));
+        assert!(matches!(
+            a.read("../escape.txt"),
+            Err(ReaderError::UnsafeEntry(_))
+        ));
         assert!(matches!(a.read("nope"), Err(ReaderError::NotFound(_))));
     }
 
@@ -594,7 +660,10 @@ pub(crate) mod tests {
         let zeros = vec![0u8; 40 * 1024 * 1024];
         make_epub(&p, EPUB3_OPF, &[("OEBPS/bomb.bin", &zeros)]);
         let mut a = EpubArchive::open(&p).unwrap();
-        assert!(matches!(a.read("OEBPS/bomb.bin"), Err(ReaderError::TooLarge(_))));
+        assert!(matches!(
+            a.read("OEBPS/bomb.bin"),
+            Err(ReaderError::TooLarge(_))
+        ));
     }
 
     #[test]
@@ -603,7 +672,8 @@ pub(crate) mod tests {
         let p = dir.path().join("x.epub");
         let f = File::create(&p).unwrap();
         let mut z = zip::ZipWriter::new(f);
-        z.start_file("hello.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        z.start_file("hello.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
         z.write_all(b"hi").unwrap();
         z.finish().unwrap();
         let mut a = EpubArchive::open(&p).unwrap();

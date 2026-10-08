@@ -1,12 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
-default-members = ["crates/*"]
+members = ["crates/*", "src-tauri"]
+default-members = ["crates/*", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
 authors = ["Jamie"]
 repository = "https://github.com/jamiedarville/BiblioChad"
 rust-version = "1.80"

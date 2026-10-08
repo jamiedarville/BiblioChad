@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- BiblioChad mascot: a jawline with glasses. Original artwork. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a211a"/>
+      <stop offset="1" stop-color="#15100c"/>
+    </linearGradient>
+    <linearGradient id="jaw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd27a"/>
+      <stop offset="1" stop-color="#e79a2b"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="210" fill="url(#bg)"/>
+  <!-- Jaw: a heroic, very square chin -->
+  <path d="M232 470 L232 610 Q232 700 300 760 L410 850 Q512 900 614 850 L724 760 Q792 700 792 610 L792 470
+           L720 470 L720 600 Q720 660 672 700 L590 768 Q512 806 434 768 L352 700 Q304 660 304 600 L304 470 Z"
+        fill="url(#jaw)"/>
+  <!-- Chin cleft -->
+  <path d="M512 790 L512 846" stroke="#15100c" stroke-width="16" stroke-linecap="round"/>
+  <!-- Smirk -->
+  <path d="M420 680 Q520 712 612 662" fill="none" stroke="#ffd27a" stroke-width="22" stroke-linecap="round"/>
+  <!-- Glasses -->
+  <g fill="none" stroke="#f3ead8" stroke-width="30" stroke-linejoin="round">
+    <rect x="236" y="330" width="230" height="160" rx="56"/>
+    <rect x="558" y="330" width="230" height="160" rx="56"/>
+    <path d="M466 392 Q512 364 558 392"/>
+    <path d="M236 380 L176 360"/>
+    <path d="M788 380 L848 360"/>
+  </g>
+  <!-- Lens glints -->
+  <path d="M286 372 L330 372" stroke="#f3ead8" stroke-opacity=".55" stroke-width="16" stroke-linecap="round"/>
+  <path d="M608 372 L652 372" stroke="#f3ead8" stroke-opacity=".55" stroke-width="16" stroke-linecap="round"/>
+  <!-- Book spine as a brow -->
+  <rect x="300" y="226" width="424" height="58" rx="18" fill="#f5b942"/>
+  <rect x="330" y="242" width="120" height="26" rx="8" fill="#15100c" opacity=".35"/>
+</svg>

@@ -16,7 +16,9 @@ impl AppPaths {
     }
 
     pub fn at(root: impl AsRef<Path>) -> Self {
-        Self { root: root.as_ref().to_path_buf() }
+        Self {
+            root: root.as_ref().to_path_buf(),
+        }
     }
 
     pub fn db(&self) -> PathBuf {

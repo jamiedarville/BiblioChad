@@ -17,7 +17,9 @@ pub fn save_cover_thumbnail(bytes: &[u8], dest: &Path) -> Result<()> {
     limits.max_alloc = Some(256 * 1024 * 1024);
     let mut reader = reader;
     reader.limits(limits);
-    let img = reader.decode().map_err(|e| LibraryError::Image(e.to_string()))?;
+    let img = reader
+        .decode()
+        .map_err(|e| LibraryError::Image(e.to_string()))?;
     let img = if img.width() > COVER_MAX || img.height() > COVER_MAX {
         img.thumbnail(COVER_MAX, COVER_MAX)
     } else {

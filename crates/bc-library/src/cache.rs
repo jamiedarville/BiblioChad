@@ -56,7 +56,13 @@ impl Library {
         Ok(Some(entry))
     }
 
-    pub fn cache_put(&self, book_key: &str, md5: Option<&str>, path: &str, bytes: i64) -> Result<()> {
+    pub fn cache_put(
+        &self,
+        book_key: &str,
+        md5: Option<&str>,
+        path: &str,
+        bytes: i64,
+    ) -> Result<()> {
         self.conn().execute(
             "INSERT INTO cache_entries(book_key, md5, path, bytes, last_access_at)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -70,7 +76,11 @@ impl Library {
     pub fn cache_remove(&self, book_key: &str) -> Result<Option<String>> {
         let c = self.conn();
         let path: Option<String> = c
-            .query_row("SELECT path FROM cache_entries WHERE book_key = ?1", [book_key], |r| r.get(0))
+            .query_row(
+                "SELECT path FROM cache_entries WHERE book_key = ?1",
+                [book_key],
+                |r| r.get(0),
+            )
             .optional()?;
         c.execute("DELETE FROM cache_entries WHERE book_key = ?1", [book_key])?;
         Ok(path)
@@ -82,7 +92,13 @@ impl Library {
                     COALESCE(SUM(CASE WHEN b.pinned = 1 THEN ce.bytes ELSE 0 END), 0)
              FROM cache_entries ce LEFT JOIN books b ON b.book_key = ce.book_key",
             [],
-            |r| Ok(CacheStats { entries: r.get(0)?, bytes: r.get(1)?, pinned_bytes: r.get(2)? }),
+            |r| {
+                Ok(CacheStats {
+                    entries: r.get(0)?,
+                    bytes: r.get(1)?,
+                    pinned_bytes: r.get(2)?,
+                })
+            },
         )?)
     }
 
@@ -120,15 +136,17 @@ impl Library {
         Ok(paths)
     }
 
-    /// All unpinned cache entries (for "clear cache").
-    pub fn cache_clear_unpinned(&self) -> Result<Vec<String>> {
+    /// Drop all unpinned cache entries except `keep` (for "clear cache").
+    /// Returns the file paths the caller should delete.
+    pub fn cache_clear_unpinned(&self, keep: Option<&str>) -> Result<Vec<String>> {
         let c = self.conn();
         let mut st = c.prepare(
             "SELECT ce.book_key, ce.path FROM cache_entries ce LEFT JOIN books b ON b.book_key = ce.book_key
-             WHERE COALESCE(b.pinned, 0) = 0",
+             WHERE COALESCE(b.pinned, 0) = 0 AND ce.book_key IS NOT ?1",
         )?;
-        let rows: Vec<(String, String)> =
-            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<_>>()?;
+        let rows: Vec<(String, String)> = st
+            .query_map([keep], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
         drop(st);
         for (k, _) in &rows {
             c.execute("DELETE FROM cache_entries WHERE book_key = ?1", [k])?;
@@ -155,16 +173,24 @@ mod tests {
     #[test]
     fn lru_eviction_respects_pins_and_open_book() {
         let (lib, _) = lib_with_tree();
-        lib.cache_put("drive:dune", Some("m1"), "/c/dune", 100).unwrap();
+        lib.cache_put("drive:dune", Some("m1"), "/c/dune", 100)
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
-        lib.cache_put("drive:found", Some("m2"), "/c/found", 100).unwrap();
+        lib.cache_put("drive:found", Some("m2"), "/c/found", 100)
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
-        lib.cache_put("drive:moby", Some("m3"), "/c/moby", 100).unwrap();
+        lib.cache_put("drive:moby", Some("m3"), "/c/moby", 100)
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         lib.cache_put("drive:top", None, "/c/top", 100).unwrap();
 
         std::thread::sleep(std::time::Duration::from_millis(2));
-        assert!(lib.cache_lookup("drive:dune", Some("other")).unwrap().is_none(), "md5 mismatch");
+        assert!(
+            lib.cache_lookup("drive:dune", Some("other"))
+                .unwrap()
+                .is_none(),
+            "md5 mismatch"
+        );
         let dune = lib.cache_lookup("drive:dune", Some("M1")).unwrap().unwrap();
         assert_eq!(dune.path, "/c/dune");
 
@@ -176,7 +202,7 @@ mod tests {
         let s = lib.cache_stats().unwrap();
         assert_eq!((s.entries, s.bytes, s.pinned_bytes), (2, 200, 100));
         assert!(lib.cache_evict(1000, None).unwrap().is_empty());
-        assert_eq!(lib.cache_clear_unpinned().unwrap(), vec!["/c/moby"]);
+        assert_eq!(lib.cache_clear_unpinned(None).unwrap(), vec!["/c/moby"]);
         assert!(lib.pinned_uncached().unwrap().is_empty());
         lib.cache_remove("drive:found").unwrap();
         assert_eq!(lib.pinned_uncached().unwrap(), vec![found]);

@@ -57,7 +57,14 @@ impl Library {
              ON CONFLICT(book_id, device_id) DO UPDATE SET
                locator_json = excluded.locator_json, percent = excluded.percent,
                status = excluded.status, updated_at = excluded.updated_at",
-            params![book_id, device_id, locator.to_json(), percent, status.as_str(), now],
+            params![
+                book_id,
+                device_id,
+                locator.to_json(),
+                percent,
+                status.as_str(),
+                now
+            ],
         )?;
         // Reading again supersedes a manual "unread"; "finished" stays until
         // the reader actually reaches the end again or resets it.
@@ -108,12 +115,20 @@ impl Library {
         let rows = st.query_map([book_id], |r| {
             let loc: String = r.get(1)?;
             let status: String = r.get(3)?;
-            Ok((r.get::<_, String>(0)?, loc, r.get::<_, f64>(2)?, status, r.get::<_, i64>(4)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                loc,
+                r.get::<_, f64>(2)?,
+                status,
+                r.get::<_, i64>(4)?,
+            ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (device_id, loc, percent, status, updated_at) = row?;
-            let Ok(locator) = Locator::from_json(&loc) else { continue };
+            let Ok(locator) = Locator::from_json(&loc) else {
+                continue;
+            };
             out.push(ProgressRecord {
                 device_id,
                 locator,
@@ -126,7 +141,10 @@ impl Library {
     }
 
     pub fn progress_for(&self, book_id: i64, device_id: &str) -> Result<Option<ProgressRecord>> {
-        Ok(self.progress_rows(book_id)?.into_iter().find(|p| p.device_id == device_id))
+        Ok(self
+            .progress_rows(book_id)?
+            .into_iter()
+            .find(|p| p.device_id == device_id))
     }
 
     /// Where to open a book, plus an optional prompt if another device got
@@ -140,7 +158,11 @@ impl Library {
         let mine = rows.iter().find(|p| p.device_id == device_id).cloned();
         let newest_other = rows.iter().find(|p| p.device_id != device_id);
         let prompt = newest_other.and_then(|o| {
-            bc_sync::resume_prompt(mine.as_ref().map(|m| m.entry()).as_ref(), &o.entry(), device_id)
+            bc_sync::resume_prompt(
+                mine.as_ref().map(|m| m.entry()).as_ref(),
+                &o.entry(),
+                device_id,
+            )
         });
         // With no local row at all, just start where the other device is.
         if mine.is_none() {
@@ -155,7 +177,10 @@ impl Library {
     pub fn reset_progress(&self, book_id: i64) -> Result<()> {
         let c = self.conn();
         c.execute("DELETE FROM progress WHERE book_id = ?1", [book_id])?;
-        c.execute("UPDATE books SET status_override = NULL WHERE id = ?1", [book_id])?;
+        c.execute(
+            "UPDATE books SET status_override = NULL WHERE id = ?1",
+            [book_id],
+        )?;
         Ok(())
     }
 
@@ -196,7 +221,9 @@ impl Library {
         // not "broken" before you have had a chance to read today).
         let c = self.conn();
         let mut st = c.prepare("SELECT day FROM reading_days ORDER BY day DESC LIMIT 400")?;
-        let days: Vec<String> = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+        let days: Vec<String> = st
+            .query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
         let parse = |s: &str| chrono_like::days_from_civil(s);
         let Some(t) = parse(today) else { return Ok(0) };
         let mut expected = t;
@@ -261,7 +288,10 @@ mod chrono_like {
     #[test]
     fn epoch() {
         assert_eq!(days_from_civil("1970-01-01"), Some(0));
-        assert_eq!(days_from_civil("2024-03-01").unwrap() - days_from_civil("2024-02-28").unwrap(), 2);
+        assert_eq!(
+            days_from_civil("2024-03-01").unwrap() - days_from_civil("2024-02-28").unwrap(),
+            2
+        );
     }
 }
 
@@ -272,7 +302,12 @@ mod tests {
     use bc_core::FitMode;
 
     fn page(p: u32) -> Locator {
-        Locator::Pdf { page: p, offset: 0.0, fit: FitMode::Width, zoom: 1.0 }
+        Locator::Pdf {
+            page: p,
+            offset: 0.0,
+            fit: FitMode::Width,
+            zoom: 1.0,
+        }
     }
 
     #[test]
@@ -280,7 +315,8 @@ mod tests {
         let (lib, _) = lib_with_tree();
         let id = lib.book_id_by_key("drive:found").unwrap().unwrap();
         assert!(lib.continue_reading(10).unwrap().is_empty());
-        lib.save_progress(id, "me", &page(41), 0.2, Some("2026-10-08")).unwrap();
+        lib.save_progress(id, "me", &page(41), 0.2, Some("2026-10-08"))
+            .unwrap();
         let s = lib.book_summary(id).unwrap();
         assert_eq!(s.status, ReadStatus::Reading);
         assert!((s.percent - 0.2).abs() < 1e-9);
@@ -324,7 +360,8 @@ mod tests {
     fn manual_status_and_stats() {
         let (lib, _) = lib_with_tree();
         let id = lib.book_id_by_key("drive:dune").unwrap().unwrap();
-        lib.set_status_override(id, Some(ReadStatus::Finished)).unwrap();
+        lib.set_status_override(id, Some(ReadStatus::Finished))
+            .unwrap();
         let st = lib.stats("2026-10-08").unwrap();
         assert_eq!(st.finished, 1);
         assert_eq!(st.total_books, 4);
@@ -335,11 +372,19 @@ mod tests {
     fn streaks() {
         let (lib, _) = lib_with_tree();
         let id = lib.book_id_by_key("drive:dune").unwrap().unwrap();
-        let loc = Locator::Epub { cfi: "x".into(), href: None, percent: 0.1 };
+        let loc = Locator::Epub {
+            cfi: "x".into(),
+            href: None,
+            percent: 0.1,
+        };
         for d in ["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-03"] {
             lib.save_progress(id, "me", &loc, 0.1, Some(d)).unwrap();
         }
-        assert_eq!(lib.stats("2026-10-08").unwrap().streak_days, 3, "yesterday keeps the streak");
+        assert_eq!(
+            lib.stats("2026-10-08").unwrap().streak_days,
+            3,
+            "yesterday keeps the streak"
+        );
         assert_eq!(lib.stats("2026-10-07").unwrap().streak_days, 3);
         assert_eq!(lib.stats("2026-10-10").unwrap().streak_days, 0);
     }

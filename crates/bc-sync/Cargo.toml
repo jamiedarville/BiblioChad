@@ -3,7 +3,7 @@ name = "bc-sync"
 description = "BiblioChad reading-position and annotation sync model"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+publish = false
 
 [dependencies]
 bc-core = { path = "../bc-core" }

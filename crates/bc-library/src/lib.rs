@@ -8,8 +8,8 @@
 mod cache;
 mod collections;
 mod covers;
-mod notes;
 mod nodes;
+mod notes;
 mod progress;
 mod query;
 mod schema;
@@ -69,7 +69,9 @@ impl Library {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
         schema::migrate(&conn)?;
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
@@ -106,14 +108,20 @@ pub(crate) mod testutil {
 
     pub fn lib_with_tree() -> (Library, i64) {
         let lib = Library::open_in_memory().unwrap();
-        let src = lib.add_drive_source(Some("me@example.com"), "root", "Books").unwrap();
+        let src = lib
+            .add_drive_source(Some("me@example.com"), "root", "Books")
+            .unwrap();
         let n = |id: &str, parent: &str, name: &str, folder: bool, mime: &str| NodeRecord {
             drive_id: id.into(),
             parent_drive_id: Some(parent.into()),
             name: name.into(),
             mime_type: Some(mime.into()),
             size: Some(1000),
-            md5: if folder { None } else { Some(format!("md5-{id}")) },
+            md5: if folder {
+                None
+            } else {
+                Some(format!("md5-{id}"))
+            },
             modified_time: None,
             is_folder: folder,
             is_trashed: false,
@@ -128,8 +136,20 @@ pub(crate) mod testutil {
                 n("cl", "root", "Classics", true, FOLDER),
                 n("dune", "sf", "Dune.epub", false, "application/epub+zip"),
                 n("found", "sf", "Foundation.pdf", false, "application/pdf"),
-                n("moby", "cl", "Moby Dick.epub", false, "application/octet-stream"),
-                n("doc", "root", "Notes", false, "application/vnd.google-apps.document"),
+                n(
+                    "moby",
+                    "cl",
+                    "Moby Dick.epub",
+                    false,
+                    "application/octet-stream",
+                ),
+                n(
+                    "doc",
+                    "root",
+                    "Notes",
+                    false,
+                    "application/vnd.google-apps.document",
+                ),
                 n("top", "root", "Top Level.pdf", false, "application/pdf"),
             ],
         )
