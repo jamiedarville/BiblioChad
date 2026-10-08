@@ -1,0 +1,8 @@
+/target
+node_modules/
+/ui/dist/
+/src-tauri/gen/
+/src-tauri/resources/pdfium/*
+!/src-tauri/resources/pdfium/README.md
+*.part
+.DS_Store

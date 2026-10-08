@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+default-members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Jamie"]
+repository = "https://github.com/jamiedarville/BiblioChad"
+rust-version = "1.80"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+panic = "unwind"

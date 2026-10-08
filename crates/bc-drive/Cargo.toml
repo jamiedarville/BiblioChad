@@ -1,0 +1,39 @@
+[package]
+name = "bc-drive"
+description = "BiblioChad Google Drive client: OAuth (loopback + PKCE), crawl, changes, downloads"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "http2", "charset"] }
+tokio = { version = "1", features = ["net", "io-util", "time", "fs", "macros", "rt", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+url = "2"
+sha2 = "0.10"
+md-5 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+hex = "0.4"
+keyring = "3"
+
+# D8: SChannel on Windows (no C/asm toolchain needed on ARM64); rustls elsewhere.
+[target.'cfg(windows)'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+keyring = { version = "3", features = ["linux-native"] }
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
