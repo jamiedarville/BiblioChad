@@ -22,7 +22,7 @@ The design document is [`docs/project.md`](docs/project.md). This README covers 
 | **Offline**: LRU cache with a size cap, "Keep offline" pinning, clear cache | ✅ |
 | Local metadata edits, Markdown export of highlights, local file import, "Open with BiblioChad" for .epub/.pdf | ✅ |
 | Chad Mode (jokes, ranks, streaks, achievements) with an off switch | ✅ |
-| **Windows ARM64 installer** (NSIS + MSI) built on GitHub's `windows-11-arm` runner | ✅ in CI |
+| **Windows installers** (NSIS + MSI + portable zip) for **ARM64** (`windows-11-arm` runner) and **x64** (`windows-latest`) | ✅ in CI |
 | PDF highlights, footnote pop-ups, TTS, reading stats beyond streaks | ❌ not yet (P1/P2) |
 
 ## Repository layout
@@ -41,18 +41,18 @@ scripts/        fetch-pdfium.{sh,ps1}, make-test-corpus.py, e2e/smoke.py
 
 All logic lives in Rust; the UI is a thin view. Book content reaches the webview only through the `bibliochad://` protocol, which validates archive paths, strips `<script>`/`on*` handlers/`javascript:` URLs, and sends a strict CSP.
 
-## Building on a Windows ARM64 machine
+## Building on Windows (ARM64 or x64)
 
 1. Install **Rust** with `rustup` (host `aarch64-pc-windows-msvc`; check with `rustc -vV`).
-2. Install **Visual Studio 2022 Build Tools** with *MSVC ARM64 build tools* and a Windows 11 SDK.
-3. Install **Node.js 22** (ARM64 build).
-4. Get PDFium: `.\scripts\fetch-pdfium.ps1 -Platform win-arm64`.
+2. Install **Visual Studio 2022 Build Tools** with the MSVC build tools for your CPU (*ARM64* or *x64/x86*) and a Windows 11 SDK.
+3. Install **Node.js 22** (the build matching your CPU).
+4. Get PDFium: `.\scripts\fetch-pdfium.ps1 -Platform win-arm64` (or `-Platform win-x64` on an Intel/AMD PC).
 5. Install JS deps: `npm ci; npm --prefix ui ci`.
 6. Run in dev mode: `npx tauri dev`. Build the installer with `npx tauri build`. Output goes to `target\release\bundle\nsis\` and `...\msi\`.
 
 The installer bundles `pdfium.dll` and embeds the WebView2 bootstrapper, so it also works on a clean machine.
 
-Every push also builds the ARM64 installer in CI (`windows-arm64` job). Download it from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
+Every push also builds both Windows versions in CI. Download `bibliochad-windows-arm64` (Snapdragon and other ARM PCs) or `bibliochad-windows-x64` (Intel/AMD PCs) from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
 
 ## Connecting Google Drive
 
