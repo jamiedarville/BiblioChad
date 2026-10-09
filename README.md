@@ -2,12 +2,29 @@
 
 # BiblioChad
 
-> An ebook reader for Windows on ARM, written in Rust, whose library *is* your Google Drive folder tree.
+> An ebook reader for Windows (ARM64 and x64), written in Rust, whose library *is* your Google Drive folder tree.
 > Reads PDF and EPUB, remembers where you stopped, and has the personality of a man who finishes every book he starts.
 
 **Finish the book.**
 
-The design document is [`docs/project.md`](docs/project.md). This README covers building and running the app, and how the code maps to that plan.
+The design document is [`docs/project.md`](docs/project.md). This README covers downloading, building and running the app, and how the code maps to that plan.
+
+## Download
+
+| Your PC | Download |
+|---|---|
+| **Intel / AMD** (most Windows PCs) | [**BiblioChad for Windows x64**](https://github.com/jamiedarville/BiblioChad/actions/runs/37968422846/artifacts/11634439893) |
+| **ARM** (Snapdragon, Surface Pro X, Copilot+ PCs) | [**BiblioChad for Windows ARM64**](https://github.com/jamiedarville/BiblioChad/actions/runs/37968422846/artifacts/11634607839) |
+
+Not sure which you have? **Settings → System → About → System type** says *x64-based processor* or *ARM-based processor*.
+
+Each download is a zip containing:
+
+- `BiblioChad_0.1.0_<arch>-setup.exe`: **the installer; most people want this one.** It installs for your user, adds a Start menu entry, and shows up in *Installed apps*.
+- `BiblioChad_0.1.0_<arch>_en-US.msi`: the same app as an MSI, for managed or all-users installs.
+- `BiblioChad-portable-<arch>.zip`: no install; unzip and run `bibliochad.exe` (keep the `pdfium` folder next to it).
+
+Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**. Downloading from GitHub Actions needs a (free) GitHub sign-in, and these builds expire on 2027-01-07. Newer builds are always on the [Actions page](https://github.com/jamiedarville/BiblioChad/actions/workflows/ci.yml).
 
 ## What works today
 
@@ -53,8 +70,6 @@ All logic lives in Rust; the UI is a thin view. Book content reaches the webview
 The installer bundles `pdfium.dll` and embeds the WebView2 bootstrapper, so it also works on a clean machine.
 
 Every push also builds both Windows versions in CI. Download `bibliochad-windows-arm64` (Snapdragon and other ARM PCs) or `bibliochad-windows-x64` (Intel/AMD PCs) from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
-
-MSI Executable is here -> https://github.com/jamiedarville/BiblioChad/actions/runs/37849542761
 
 ## Connecting Google Drive
 
