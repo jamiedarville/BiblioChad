@@ -11,20 +11,20 @@ The design document is [`docs/project.md`](docs/project.md). This README covers 
 
 ## Download
 
-| Your PC | Download |
-|---|---|
-| **Intel / AMD** (most Windows PCs) | [**BiblioChad for Windows x64**](https://github.com/jamiedarville/BiblioChad/actions/runs/37968422846/artifacts/11634439893) |
-| **ARM** (Snapdragon, Surface Pro X, Copilot+ PCs) | [**BiblioChad for Windows ARM64**](https://github.com/jamiedarville/BiblioChad/actions/runs/37968422846/artifacts/11634607839) |
+| Your PC | Installer (recommended) | Other options |
+|---|---|---|
+| **Intel / AMD** (most Windows PCs) | [**Download for Windows x64**](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-x64.msi) · [Portable zip](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Portable-x64.zip) |
+| **ARM** (Snapdragon, Surface Pro X, Copilot+ PCs) | [**Download for Windows ARM64**](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-arm64.msi) · [Portable zip](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Portable-arm64.zip) |
 
-Not sure which you have? **Settings → System → About → System type** says *x64-based processor* or *ARM-based processor*.
+These links always fetch the newest [release](https://github.com/jamiedarville/BiblioChad/releases/latest). Not sure which you have? **Settings → System → About → System type** says *x64-based processor* or *ARM-based processor*.
 
-Each download is a zip containing:
+- **Installer** (`.exe`): installs for your user, adds a Start menu entry, and shows up in *Installed apps*.
+- **MSI**: the same app as an MSI package, for managed or all-users installs.
+- **Portable zip**: no install; unzip and run `bibliochad.exe` (keep the `pdfium` folder next to it).
 
-- `BiblioChad_0.1.0_<arch>-setup.exe`: **the installer; most people want this one.** It installs for your user, adds a Start menu entry, and shows up in *Installed apps*.
-- `BiblioChad_0.1.0_<arch>_en-US.msi`: the same app as an MSI, for managed or all-users installs.
-- `BiblioChad-portable-<arch>.zip`: no install; unzip and run `bibliochad.exe` (keep the `pdfium` folder next to it).
+Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**.
 
-Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**. Downloading from GitHub Actions needs a (free) GitHub sign-in, and these builds expire on 2027-01-07. Newer builds are always on the [Actions page](https://github.com/jamiedarville/BiblioChad/actions/workflows/ci.yml).
+**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`), commit, then push a matching tag, e.g. `git tag v0.1.1 && git push origin v0.1.1`. The Release workflow builds both versions and publishes them.
 
 ## What works today
 
