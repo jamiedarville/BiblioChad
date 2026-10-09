@@ -1,11 +1,14 @@
 name: Release
 
-# Push a tag like v0.1.0 to build both Windows versions and publish them as a
-# GitHub Release. Asset names carry no version, so README links to
+# Builds both Windows versions and publishes them as a GitHub Release.
+# Start it either by pushing a tag like v0.1.0, or with "Run workflow" on the
+# Actions tab (that creates the tag v<version from tauri.conf.json>).
+# Asset names carry no version, so README links to
 # releases/latest/download/<name> always fetch the newest build.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -36,10 +39,13 @@ jobs:
           done
           (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release
-      - name: Check the tag matches the app version
+      - name: Work out the tag
         run: |
           app=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
-          [ "v$app" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != app version v$app"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            [ "v$app" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME != app version v$app"; exit 1; }
+          fi
+          echo "TAG=v$app" >> "$GITHUB_ENV"
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,14 +55,14 @@ jobs:
 
           | Your PC | Installer | Other |
           |---|---|---|
-          | **Intel / AMD** (x64) | [BiblioChad-Setup-x64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-x64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-Portable-x64.zip) |
-          | **ARM** (Snapdragon / Copilot+) | [BiblioChad-Setup-arm64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-arm64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/BiblioChad-Portable-arm64.zip) |
+          | **Intel / AMD** (x64) | [BiblioChad-Setup-x64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-x64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-x64.zip) |
+          | **ARM** (Snapdragon / Copilot+) | [BiblioChad-Setup-arm64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-arm64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-arm64.zip) |
 
           Builds are not code-signed yet: Windows SmartScreen will warn on first run. Click **More info → Run anyway**.
           Checksums are in SHA256SUMS.txt.
           NOTES
-          gh release create "$GITHUB_REF_NAME" release/* \
+          gh release create "$TAG" release/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "BiblioChad $GITHUB_REF_NAME" \
+            --title "BiblioChad $TAG" \
             --notes-file notes.md \
             --target "$GITHUB_SHA"

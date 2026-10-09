@@ -24,7 +24,7 @@ These links always fetch the newest [release](https://github.com/jamiedarville/B
 
 Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**.
 
-**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`), commit, then push a matching tag, e.g. `git tag v0.1.1 && git push origin v0.1.1`. The Release workflow builds both versions and publishes them.
+**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`) and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build x64 and ARM64 and publish them as a GitHub Release.
 
 ## What works today
 
