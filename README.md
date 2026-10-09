@@ -54,6 +54,8 @@ The installer bundles `pdfium.dll` and embeds the WebView2 bootstrapper, so it a
 
 Every push also builds both Windows versions in CI. Download `bibliochad-windows-arm64` (Snapdragon and other ARM PCs) or `bibliochad-windows-x64` (Intel/AMD PCs) from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
 
+MSI Executable is here -> https://github.com/jamiedarville/BiblioChad/actions/runs/37849542761
+
 ## Connecting Google Drive
 
 BiblioChad is a personal app, so you bring your own OAuth client:
