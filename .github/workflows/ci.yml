@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev xvfb webkit2gtk-driver
+            libjavascriptcoregtk-4.1-dev libdbus-1-dev xvfb webkit2gtk-driver
       - name: PDFium
         run: scripts/fetch-pdfium.sh linux-x64
       - name: UI install, typecheck, unit tests, build
@@ -73,3 +73,7 @@ jobs:
     uses: ./.github/workflows/build-windows.yml
     with:
       run-tests: true
+
+  linux-package:
+    name: Linux
+    uses: ./.github/workflows/build-linux.yml

@@ -1,0 +1,76 @@
+# Maintainer: Jamie Darville
+#
+# Builds BiblioChad from the checkout this file lives in:
+#   cd packaging/arch && makepkg -si
+# Tracked and untracked (not ignored) files are copied to $srcdir first, so
+# the build never writes into the working tree.
+
+pkgname=bibliochad
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Ebook reader (EPUB, PDF) whose library is your Google Drive folder tree'
+arch=('x86_64')
+url='https://github.com/jamiedarville/BiblioChad'
+license=('LicenseRef-BiblioChad')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'glib2' 'dbus' 'gcc-libs' 'glibc'
+         'hicolor-icon-theme' 'xdg-utils')
+makedepends=('cargo' 'nodejs' 'npm' 'git')
+optdepends=('gnome-keyring: keeps the Google Drive sign-in across restarts'
+            'kwallet: keeps the Google Drive sign-in across restarts (KDE)'
+            'keepassxc: keeps the Google Drive sign-in across restarts')
+# Cargo's own LTO is on in the release profile; makepkg's -flto breaks ring.
+options=('!lto')
+
+# Prebuilt PDFium from bblanchon/pdfium-binaries. Bump both lines together.
+_pdfium=8086
+source=("pdfium-linux-x64-$_pdfium.tgz::https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F$_pdfium/pdfium-linux-x64.tgz")
+noextract=("pdfium-linux-x64-$_pdfium.tgz")
+sha256sums=('588577cf52dabc1a444988bac841920df54cc2f141801424de97ab04f4fbb935')
+
+_repo="$(realpath "${startdir:-$PWD}/../..")"
+
+pkgver() {
+  sed -n 's/^ *"version": *"\(.*\)",*$/\1/p' "$_repo/src-tauri/tauri.conf.json" | head -1
+}
+
+prepare() {
+  rm -rf "$pkgname" pdfium
+  mkdir -p "$pkgname" pdfium
+  git -C "$_repo" ls-files -z --cached --others --exclude-standard |
+    tar -C "$_repo" --null --ignore-failed-read -T - -cf - |
+    tar -xf - -C "$pkgname"
+  tar -xzf "pdfium-linux-x64-$_pdfium.tgz" -C pdfium
+
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+  npm --prefix ui ci --no-audit --no-fund
+}
+
+build() {
+  cd "$pkgname"
+  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
+  export CARGO_TARGET_DIR=target
+  npm --prefix ui run build
+  # What `tauri build --no-bundle` runs, without needing the Tauri CLI.
+  cargo build --frozen --release -p bibliochad --features tauri/custom-protocol
+}
+
+package() {
+  install -Dm755 "$pkgname/target/release/bibliochad" "$pkgdir/usr/bin/bibliochad"
+
+  install -Dm644 pdfium/lib/libpdfium.so "$pkgdir/usr/lib/bibliochad/pdfium/libpdfium.so"
+  install -Dm644 pdfium/LICENSE "$pkgdir/usr/share/licenses/$pkgname/PDFIUM_LICENSE.txt"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname/pdfium" pdfium/licenses/*
+
+  cd "$pkgname"
+  install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+  install -Dm644 packaging/arch/bibliochad.desktop "$pkgdir/usr/share/applications/bibliochad.desktop"
+  local size
+  for size in 32 64 128; do
+    install -Dm644 "src-tauri/icons/${size}x${size}.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/bibliochad.png"
+  done
+  install -Dm644 'src-tauri/icons/128x128@2x.png' "$pkgdir/usr/share/icons/hicolor/256x256/apps/bibliochad.png"
+  install -Dm644 src-tauri/icons/icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/bibliochad.png"
+}

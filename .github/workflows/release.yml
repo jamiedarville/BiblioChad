@@ -1,6 +1,7 @@
 name: Release
 
-# Builds both Windows versions and publishes them as a GitHub Release.
+# Builds both Windows versions and the Arch Linux package, and publishes them
+# as a GitHub Release.
 # Start it either by pushing a tag like v0.1.0, or with "Run workflow" on the
 # Actions tab (that creates the tag v<version from tauri.conf.json>).
 # Asset names carry no version, so README links to
@@ -19,14 +20,17 @@ jobs:
     with:
       run-tests: false
 
+  linux:
+    uses: ./.github/workflows/build-linux.yml
+
   publish:
-    needs: build
+    needs: [build, linux]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: bibliochad-windows-*
+          pattern: bibliochad-*
           path: dist
       - name: Collect assets with stable names
         run: |
@@ -37,6 +41,7 @@ jobs:
             cp "$(find "$d" -name '*.msi' | head -1)"       "release/BiblioChad-$arch.msi"
             cp "$(find "$d" -name 'BiblioChad-portable-*.zip' | head -1)" "release/BiblioChad-Portable-$arch.zip"
           done
+          cp dist/bibliochad-linux-x64/bibliochad-*.pkg.tar.zst release/bibliochad-x86_64.pkg.tar.zst
           (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release
       - name: Work out the tag
@@ -57,6 +62,12 @@ jobs:
           |---|---|---|
           | **Intel / AMD** (x64) | [BiblioChad-Setup-x64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-x64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-x64.zip) |
           | **ARM** (Snapdragon / Copilot+) | [BiblioChad-Setup-arm64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-arm64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-arm64.zip) |
+
+          **Arch Linux** (x86_64, and derivatives such as CachyOS, EndeavourOS, Manjaro):
+
+          \`\`\`
+          sudo pacman -U https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/bibliochad-x86_64.pkg.tar.zst
+          \`\`\`
 
           Builds are not code-signed yet: Windows SmartScreen will warn on first run. Click **More info → Run anyway**.
           Checksums are in SHA256SUMS.txt.

@@ -2,7 +2,7 @@
 
 # BiblioChad
 
-> An ebook reader for Windows (ARM64 and x64), written in Rust, whose library *is* your Google Drive folder tree.
+> An ebook reader for Windows (ARM64 and x64) and Linux (x64), written in Rust, whose library *is* your Google Drive folder tree.
 > Reads PDF and EPUB, remembers where you stopped, and has the personality of a man who finishes every book he starts.
 
 **Finish the book.**
@@ -24,7 +24,19 @@ These links always fetch the newest [release](https://github.com/jamiedarville/B
 
 Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**.
 
-**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`) and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build x64 and ARM64 and publish them as a GitHub Release.
+### Arch Linux (x86_64)
+
+Works on Arch and its derivatives (CachyOS, EndeavourOS, Manjaro):
+
+```bash
+sudo pacman -U https://github.com/jamiedarville/BiblioChad/releases/latest/download/bibliochad-x86_64.pkg.tar.zst
+```
+
+Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
+
+The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
+
+**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`) and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
 
 ## What works today
 
@@ -33,13 +45,14 @@ Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: cl
 | **EPUB** (foliate-js): paginated and scroll modes, TOC, themes (light/sepia/dark), font, size, spacing, margins, line length, justification, hyphenation, in-book search, highlights in 4 colors, notes, copy | ✅ |
 | **PDF** (PDFium in Rust): continuous and single-page, fit width/page, zoom (Ctrl+wheel), outline, selectable text layer, search, dark-mode inversion | ✅ |
 | **Position memory**: saved ~2 s after the last page turn and before the window closes; restored on open | ✅ |
-| **Google Drive**: OAuth loopback + PKCE, refresh token in Windows Credential Manager, folder browser (My Drive + Shared Drives), resumable crawl, incremental `changes.list` sync, shortcuts, md5-verified downloads | ✅ (needs your OAuth client, see below) |
+| **Google Drive**: OAuth loopback + PKCE, refresh token in Windows Credential Manager (Secret Service on Linux), folder browser (My Drive + Shared Drives), resumable crawl, incremental `changes.list` sync, shortcuts, md5-verified downloads | ✅ (needs your OAuth client, see below) |
 | **Library**: folder = shelf with breadcrumbs, All books / Recently read / Favorites / Collections, search, sort, filter, grid and list (virtualized), covers (EPUB/PDF, plus Drive thumbnails before first open), Continue Reading, read status | ✅ |
 | **Cross-device sync** of positions, bookmarks and highlights through a hidden `appDataFolder` file, with a "continue from page 212 on your other device?" prompt | ✅ |
 | **Offline**: LRU cache with a size cap, "Keep offline" pinning, clear cache | ✅ |
 | Local metadata edits, Markdown export of highlights, local file import, "Open with BiblioChad" for .epub/.pdf | ✅ |
 | Chad Mode (jokes, ranks, streaks, achievements) with an off switch | ✅ |
 | **Windows installers** (NSIS + MSI + portable zip) for **ARM64** (`windows-11-arm` runner) and **x64** (`windows-latest`) | ✅ in CI |
+| **Arch Linux package** (`packaging/arch/PKGBUILD`, x86_64) | ✅ in CI |
 | PDF highlights, footnote pop-ups, TTS, reading stats beyond streaks | ❌ not yet (P1/P2) |
 
 ## Repository layout
@@ -53,6 +66,7 @@ crates/
   bc-drive/     OAuth (loopback + PKCE), keyring token store, Drive v3 client
 src-tauri/      app shell: commands, bibliochad:// protocol, Drive sync glue, packaging
 ui/             Svelte 5 + TypeScript UI; vendored foliate-js under ui/src/vendor
+packaging/arch/ PKGBUILD and desktop entry for Arch Linux
 scripts/        fetch-pdfium.{sh,ps1}, make-test-corpus.py, e2e/smoke.py
 ```
 
@@ -71,6 +85,15 @@ The installer bundles `pdfium.dll` and embeds the WebView2 bootstrapper, so it a
 
 Every push also builds both Windows versions in CI. Download `bibliochad-windows-arm64` (Snapdragon and other ARM PCs) or `bibliochad-windows-x64` (Intel/AMD PCs) from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
 
+## Building on Arch Linux
+
+```bash
+sudo pacman -S --needed base-devel git rust nodejs npm webkit2gtk-4.1
+cd packaging/arch && makepkg -si      # builds and installs the bibliochad package
+```
+
+The `PKGBUILD` builds the checkout it sits in (uncommitted changes included), downloads a pinned PDFium, and installs the binary to `/usr/bin/bibliochad`, PDFium to `/usr/lib/bibliochad/pdfium/`, and a desktop entry that registers BiblioChad for `.epub` and `.pdf`. For day-to-day development use `npx tauri dev` as described under [Development](#development).
+
 ## Connecting Google Drive
 
 BiblioChad is a personal app, so you bring your own OAuth client:
@@ -81,14 +104,15 @@ BiblioChad is a personal app, so you bring your own OAuth client:
 4. Under **Credentials**, create an OAuth client ID of type **Desktop app** and download its JSON.
 5. In BiblioChad: **Settings → Google Drive → Import client JSON…**, then **Connect Google Drive**, then pick your library folder.
 
-The JSON is stored as `%LOCALAPPDATA%\BiblioChad\google-client.json`. You can instead bake a client in at build time with `BIBLIOCHAD_GOOGLE_CLIENT_ID` / `BIBLIOCHAD_GOOGLE_CLIENT_SECRET`. For desktop apps Google does not treat the secret as confidential.
+The JSON is stored as `%LOCALAPPDATA%\BiblioChad\google-client.json` (`~/.local/share/bibliochad/google-client.json` on Linux). You can instead bake a client in at build time with `BIBLIOCHAD_GOOGLE_CLIENT_ID` / `BIBLIOCHAD_GOOGLE_CLIENT_SECRET`. For desktop apps Google does not treat the secret as confidential.
 
 The only thing BiblioChad ever writes to Drive is `bibliochad-sync.json` in the hidden app-data folder.
 
 ## Development
 
 ```bash
-# Linux deps for the shell: libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
+# Linux deps for the shell (Debian/Ubuntu): libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev
+# On Arch: webkit2gtk-4.1 (see "Building on Arch Linux")
 scripts/fetch-pdfium.sh linux-x64        # or win-arm64 / mac-arm64 ...
 python3 scripts/make-test-corpus.py      # test-corpus/chad-test.{epub,pdf}
 
@@ -107,7 +131,7 @@ Useful environment variables:
 
 | Variable | Purpose |
 |---|---|
-| `BIBLIOCHAD_DATA_DIR` | use a different data folder (default `%LOCALAPPDATA%\BiblioChad`) |
+| `BIBLIOCHAD_DATA_DIR` | use a different data folder (default `%LOCALAPPDATA%\BiblioChad`, or `~/.local/share/bibliochad` on Linux) |
 | `PDFIUM_DIR` | folder containing `pdfium.dll` / `libpdfium.so` |
 | `BIBLIOCHAD_LOG` | log filter, e.g. `debug` (logs go to `<data>\logs\bibliochad.log`) |
 

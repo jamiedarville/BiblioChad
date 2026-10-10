@@ -10,7 +10,7 @@ pub trait TokenStore: Send + Sync {
 }
 
 /// OS credential store: Windows Credential Manager on Windows, Keychain on
-/// macOS, the kernel keyring on Linux.
+/// macOS, the Secret Service (GNOME Keyring, KWallet, KeePassXC) on Linux.
 pub struct KeyringStore {
     service: String,
     user: String,

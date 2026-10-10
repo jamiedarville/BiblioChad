@@ -131,7 +131,7 @@ impl AppState {
         self.pdf.as_ref().map_err(|e| {
             crate::error::CmdError::new(
                 "pdfium_missing",
-                format!("PDF support is unavailable because pdfium could not be loaded ({e}). Reinstall BiblioChad or place pdfium.dll next to the app."),
+                format!("PDF support is unavailable because pdfium could not be loaded ({e}). Reinstall BiblioChad or place the pdfium library next to the app."),
             )
         })
     }

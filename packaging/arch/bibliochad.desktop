@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=BiblioChad
+GenericName=Ebook Reader
+Comment=Finish the book.
+Exec=bibliochad %F
+Icon=bibliochad
+Terminal=false
+Categories=Office;Viewer;
+MimeType=application/epub+zip;application/pdf;
+StartupWMClass=bibliochad

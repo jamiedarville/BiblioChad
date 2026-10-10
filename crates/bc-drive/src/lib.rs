@@ -2,7 +2,7 @@
 //!
 //! * [`oauth`]: installed-app OAuth 2.0 with a loopback redirect and PKCE.
 //!   The refresh token lives in the OS credential store (Windows Credential
-//!   Manager); access tokens stay in memory.
+//!   Manager, or the Secret Service on Linux); access tokens stay in memory.
 //! * [`client`]: a small Drive v3 client with retry/backoff, the folder
 //!   crawl, the changes feed, verified downloads and the `appDataFolder`
 //!   sync file. The library scope is read-only; the only write is to

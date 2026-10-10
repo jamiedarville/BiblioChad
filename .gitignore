@@ -7,3 +7,5 @@ node_modules/
 *.part
 .DS_Store
 /test-corpus/
+.vexp/
+.claude/

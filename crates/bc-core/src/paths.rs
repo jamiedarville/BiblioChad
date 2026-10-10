@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 /// On-disk locations. On Windows this resolves to
-/// `%LOCALAPPDATA%\BiblioChad\...`.
+/// `%LOCALAPPDATA%\BiblioChad\...`, on Linux to
+/// `$XDG_DATA_HOME/bibliochad/...` (`~/.local/share/bibliochad`).
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub root: PathBuf,

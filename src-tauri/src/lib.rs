@@ -48,7 +48,7 @@ fn init_logging(paths: &AppPaths) {
 
 /// Folders that may hold pdfium: `PDFIUM_DIR`, the bundled resources
 /// folder (the installers put it in `<install dir>\pdfium\`), then next to
-/// the executable.
+/// the executable. Linux packages install it in `/usr/lib/bibliochad/pdfium/`.
 fn pdfium_candidates(app: &tauri::App) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Ok(d) = std::env::var("PDFIUM_DIR") {
@@ -64,7 +64,10 @@ fn pdfium_candidates(app: &tauri::App) -> Vec<PathBuf> {
         .and_then(|p| p.parent().map(PathBuf::from))
     {
         candidates.push(exe_dir.join("pdfium"));
-        candidates.push(exe_dir);
+        candidates.push(exe_dir.clone());
+        if cfg!(target_os = "linux") {
+            candidates.push(exe_dir.join("../lib/bibliochad/pdfium"));
+        }
     }
     let mut seen = std::collections::HashSet::new();
     candidates.retain(|d| seen.insert(d.clone()));
