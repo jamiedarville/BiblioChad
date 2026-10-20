@@ -3,6 +3,7 @@
   // 5,000-book library scrolls smoothly.
   import type { BookSummary } from '../lib/api'
   import Cover from './Cover.svelte'
+  import BookContextMenu from './BookContextMenu.svelte'
   import { formatPercent } from '../lib/util'
 
   let {
@@ -10,12 +11,34 @@
     mode,
     onOpen,
     onDetails,
+    onChanged,
   }: {
     books: BookSummary[]
     mode: 'grid' | 'list'
     onOpen: (id: number) => void
     onDetails: (id: number) => void
+    onChanged: () => void
   } = $props()
+
+  let context = $state<{ book: BookSummary; x: number; y: number; trigger: HTMLElement } | null>(null)
+
+  function closeContext() {
+    const trigger = context?.trigger
+    context = null
+    if (trigger?.isConnected) trigger.focus({ preventScroll: true })
+  }
+
+  function openContext(e: MouseEvent | KeyboardEvent, book: BookSummary) {
+    e.preventDefault()
+    const trigger = e.currentTarget as HTMLElement
+    const bounds = trigger.getBoundingClientRect()
+    context = {
+      book,
+      trigger,
+      x: e instanceof MouseEvent ? e.clientX : bounds.left,
+      y: e instanceof MouseEvent ? e.clientY : bounds.top,
+    }
+  }
 
   let host: HTMLDivElement
   let width = $state(800)
@@ -65,11 +88,11 @@
     }
   })
 
-  function key(e: KeyboardEvent, id: number) {
-    if (e.key === 'Enter') onOpen(id)
+  function key(e: KeyboardEvent, book: BookSummary) {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter') onOpen(book.id)
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
-      e.preventDefault()
-      onDetails(id)
+      openContext(e, book)
     }
   }
 </script>
@@ -90,11 +113,8 @@
           aria-label="Open {b.title}"
           title={b.title}
           onclick={() => onOpen(b.id)}
-          onkeydown={(e) => key(e, b.id)}
-          oncontextmenu={(e) => {
-            e.preventDefault()
-            onDetails(b.id)
-          }}
+          onkeydown={(e) => key(e, b)}
+          oncontextmenu={(e) => openContext(e, b)}
         >
           {#if mode === 'grid'}
             <Cover book={b} />
@@ -135,6 +155,19 @@
     </div>
   {/each}
 </div>
+
+{#if context}
+  {#key context}
+    <BookContextMenu
+      book={context.book}
+      x={context.x}
+      y={context.y}
+      onClose={closeContext}
+      {onDetails}
+      {onChanged}
+    />
+  {/key}
+{/if}
 
 <style>
   .grid-host {

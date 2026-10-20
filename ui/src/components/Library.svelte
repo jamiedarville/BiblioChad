@@ -269,7 +269,7 @@
     {/if}
 
     {#if books.length > 0}
-      <BookGrid {books} mode={prefs.value.view} {onOpen} onDetails={(id) => (detailsId = id)} />
+      <BookGrid {books} mode={prefs.value.view} {onOpen} onDetails={(id) => (detailsId = id)} onChanged={load} />
     {:else if !loading}
       {#if overview && !overview.has_books}
         <div class="empty">
