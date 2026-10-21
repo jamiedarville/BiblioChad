@@ -36,7 +36,15 @@ Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
 
 The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
 
-**Making a release:** bump `version` in `src-tauri/tauri.conf.json` (and `Cargo.toml`) and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
+**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
+
+## New in v0.1.1
+
+- Right-click a book in grid or list view and choose **Add to Collection**. Pick an existing collection or enter a name and choose **Create and add**. Collections the book already belongs to are marked **Already added**.
+- Open the same menu with the keyboard using **Shift+F10** or the **Menu** key while a book is focused. **Book details** remains available in the menu and through the book's **⋯** button.
+- Releases now include an **Arch Linux x86_64 package**, alongside Windows x64 and ARM64 installers and portable builds.
+
+Collections are separate from Drive folders, and a book can belong to several. Manage them from the **Collections** tab; use the collection checkboxes in **Book details** to remove a book from a collection.
 
 ## What works today
 
@@ -46,7 +54,7 @@ The Google Drive sign-in is kept in your desktop keyring through the Secret Serv
 | **PDF** (PDFium in Rust): continuous and single-page, fit width/page, zoom (Ctrl+wheel), outline, selectable text layer, search, dark-mode inversion | ✅ |
 | **Position memory**: saved ~2 s after the last page turn and before the window closes; restored on open | ✅ |
 | **Google Drive**: OAuth loopback + PKCE, refresh token in Windows Credential Manager (Secret Service on Linux), folder browser (My Drive + Shared Drives), resumable crawl, incremental `changes.list` sync, shortcuts, md5-verified downloads | ✅ (needs your OAuth client, see below) |
-| **Library**: folder = shelf with breadcrumbs, All books / Recently read / Favorites / Collections, search, sort, filter, grid and list (virtualized), covers (EPUB/PDF, plus Drive thumbnails before first open), Continue Reading, read status | ✅ |
+| **Library**: folder = shelf with breadcrumbs, All books / Recently read / Favorites / Collections, search, sort, filter, grid and list (virtualized), covers (EPUB/PDF, plus Drive thumbnails before first open), Continue Reading, read status, right-click **Add to Collection** with inline collection creation | ✅ |
 | **Cross-device sync** of positions, bookmarks and highlights through a hidden `appDataFolder` file, with a "continue from page 212 on your other device?" prompt | ✅ |
 | **Offline**: LRU cache with a size cap, "Keep offline" pinning, clear cache | ✅ |
 | Local metadata edits, Markdown export of highlights, local file import, "Open with BiblioChad" for .epub/.pdf | ✅ |
