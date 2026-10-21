@@ -89,8 +89,9 @@
     }
   }
 
-  function dismissOutside(e: PointerEvent) {
+  function dismissOutside(e: MouseEvent) {
     // WebKit can open context menus before the secondary button is released.
+    // Use mousedown: some WebKit input paths omit pointerdown after that gesture.
     // Only a new primary-button press outside should dismiss this popover.
     if (e.button === 0 && e.target instanceof Node && !panel.contains(e.target)) onClose()
   }
@@ -113,7 +114,7 @@
   }
 </script>
 
-<svelte:window onresize={onClose} onpointerdown={dismissOutside} onkeydown={escape} />
+<svelte:window onresize={onClose} onmousedown={dismissOutside} onkeydown={escape} />
 
 <div
   bind:this={panel}
