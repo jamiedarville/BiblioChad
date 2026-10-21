@@ -116,6 +116,10 @@ try:
     shot("04-library-all")
 
     print("right-click menu survives releasing the secondary button (Linux WebKit)")
+    js("""window.menuEvents = [];
+          for (const type of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'contextmenu', 'click', 'auxclick', 'resize', 'toggle']) {
+            window.addEventListener(type, e => window.menuEvents.push({type, button: e.button, target: e.target?.className, menu: !!document.querySelector('.book-menu')}), true);
+          }""")
     book = js("return document.querySelector('.item')")
     call("POST", f"{S}/actions", {"actions": [{
         "type": "pointer", "id": "mouse", "parameters": {"pointerType": "mouse"},
@@ -126,7 +130,12 @@ try:
             {"type": "pointerUp", "button": 2},
         ],
     }]})
-    wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="context menu after right-button release")
+    try:
+        wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="context menu after right-button release")
+    except AssertionError:
+        print("context-menu diagnostics:", js("return {events: window.menuEvents, text: document.body.innerText, menu: document.querySelector('.book-menu')?.outerHTML}"), flush=True)
+        shot("04-failed-context-menu")
+        raise
     time.sleep(0.5)
     check(js("return document.querySelector('.book-menu')?.matches(':popover-open')"), "menu stays open after releasing right-click")
     js("document.querySelector('.book-menu button').click()")
