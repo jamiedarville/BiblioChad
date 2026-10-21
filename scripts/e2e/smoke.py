@@ -115,6 +115,51 @@ try:
     check("The Gigachad Reader" in names and "Chad's Big PDF" in names, f"grid lists both ({names})")
     shot("04-library-all")
 
+    print("right-click menu survives releasing the secondary button (Linux WebKit)")
+    book = js("return document.querySelector('.item')")
+    call("POST", f"{S}/actions", {"actions": [{
+        "type": "pointer", "id": "mouse", "parameters": {"pointerType": "mouse"},
+        "actions": [
+            {"type": "pointerMove", "duration": 0, "origin": book, "x": 0, "y": 0},
+            {"type": "pointerDown", "button": 2},
+            {"type": "pause", "duration": 250},
+            {"type": "pointerUp", "button": 2},
+        ],
+    }]})
+    wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="context menu after right-button release")
+    time.sleep(0.5)
+    check(js("return document.querySelector('.book-menu')?.matches(':popover-open')"), "menu stays open after releasing right-click")
+    js("document.querySelector('.book-menu button').click()")
+    wait(lambda: js("return !!document.querySelector('#new-book-collection')"), what="collection picker")
+    js("""const input = document.querySelector('#new-book-collection');
+          input.value = 'Smoke test collection';
+          input.dispatchEvent(new Event('input', {bubbles: true}));""")
+    js("document.querySelector('.book-menu form').requestSubmit()")
+    wait(lambda: js("return !document.querySelector('.book-menu')"), what="collection saved")
+    # Reopen with the keyboard and verify the operation reached the backend.
+    js("""document.querySelector('.item').focus();
+          document.querySelector('.item').dispatchEvent(new KeyboardEvent('keydown', {key: 'F10', shiftKey: true, bubbles: true}));""")
+    wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="keyboard context menu")
+    js("document.querySelector('.book-menu button').click()")
+    wait(lambda: js("return [...document.querySelectorAll('.choices button')].some(b => b.textContent.includes('Smoke test collection') && b.disabled)"), what="saved collection membership")
+    check(True, "collection saved and marked already added")
+    shot("04a-collection-picker")
+    js("window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))")
+    wait(lambda: js("return !document.querySelector('.book-menu')"), what="Escape dismissal")
+    js("document.querySelector('.item').dispatchEvent(new KeyboardEvent('keydown', {key: 'ContextMenu', bubbles: true}))")
+    wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="menu before outside click")
+    # An outside primary-button press still dismisses the manual popover.
+    call("POST", f"{S}/actions", {"actions": [{
+        "type": "pointer", "id": "mouse", "parameters": {"pointerType": "mouse"},
+        "actions": [
+            {"type": "pointerMove", "duration": 0, "origin": "viewport", "x": 2, "y": 2},
+            {"type": "pointerDown", "button": 0},
+            {"type": "pointerUp", "button": 0},
+        ],
+    }]})
+    wait(lambda: js("return !document.querySelector('.book-menu')"), what="outside-click dismissal")
+    check(True, "keyboard opening, Escape and outside-click dismissal work")
+
     print("PDF renders through PDFium")
     js("[...document.querySelectorAll('.item')].find(e => e.textContent.includes(\"Chad's Big PDF\")).click()")
     wait(lambda: js("return [...document.querySelectorAll('.page img')].some(i => i.complete && i.naturalWidth > 0)"), what="pdf page image")

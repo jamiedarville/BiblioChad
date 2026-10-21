@@ -281,7 +281,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bc-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "directories",
@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "bc-drive"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "bc-library"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bc-core",
  "bc-reader",
@@ -333,7 +333,7 @@ dependencies = [
 
 [[package]]
 name = "bc-reader"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bc-core",
  "image",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "bc-sync"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bc-core",
  "serde",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "bibliochad"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "bc-core",
  "bc-drive",

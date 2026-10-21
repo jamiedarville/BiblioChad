@@ -89,11 +89,20 @@
     }
   }
 
-  function key(e: KeyboardEvent) {
+  function dismissOutside(e: PointerEvent) {
+    // WebKit can open context menus before the secondary button is released.
+    // Only a new primary-button press outside should dismiss this popover.
+    if (e.button === 0 && e.target instanceof Node && !panel.contains(e.target)) onClose()
+  }
+
+  function escape(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
       onClose()
     }
+  }
+
+  function key(e: KeyboardEvent) {
     if (choosing || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
     e.preventDefault()
     const buttons = [...panel.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')]
@@ -104,11 +113,11 @@
   }
 </script>
 
-<svelte:window onresize={onClose} />
+<svelte:window onresize={onClose} onpointerdown={dismissOutside} onkeydown={escape} />
 
 <div
   bind:this={panel}
-  popover="auto"
+  popover="manual"
   class="book-menu card"
   class:picker={choosing}
   style:left="{left}px"
@@ -117,7 +126,7 @@
   aria-label={choosing ? `Add ${book.title} to collection` : `Actions for ${book.title}`}
   tabindex="-1"
   onkeydown={key}
-  ontoggle={(e) => { if (e.newState === 'closed') onClose() }}
+  oncontextmenu={(e) => e.preventDefault()}
 >
   {#if choosing}
     <h3>Add to Collection</h3>

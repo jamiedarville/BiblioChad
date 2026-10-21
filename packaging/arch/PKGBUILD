@@ -6,7 +6,7 @@
 # the build never writes into the working tree.
 
 pkgname=bibliochad
-pkgver=0.1.1
+pkgver=0.1.2
 pkgrel=1
 pkgdesc='Ebook reader (EPUB, PDF) whose library is your Google Drive folder tree'
 arch=('x86_64')

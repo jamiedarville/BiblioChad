@@ -36,7 +36,13 @@ Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
 
 The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
 
-**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.1 && git push origin v0.1.1`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
+**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.2 && git push origin v0.1.2`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
+
+## New in v0.1.2
+
+- Fixed the Linux book context menu closing when you release the right mouse button. Right-click once, release, and choose **Add to Collection** without holding the button down.
+- Click outside the menu with the left mouse button, or press **Escape**, to close it. Keyboard access with **Shift+F10** or the **Menu** key still works.
+- Fixed release publishing when Arch Linux builds include a separate debug package.
 
 ## New in v0.1.1
 
@@ -133,7 +139,7 @@ npx tauri dev                            # run the app
 target/debug/bibliochad book.epub        # import + open a file directly
 ```
 
-**End-to-end smoke test.** `scripts/e2e/smoke.py` drives the real app through `tauri-driver`. It opens the corpus EPUB, checks the book's `<script>` didn't run, turns pages, uses the TOC, returns to the library, opens the PDF, scrolls, searches, and saves screenshots. CI runs it under Xvfb and uploads the screenshots.
+**End-to-end smoke test.** `scripts/e2e/smoke.py` drives the real app through `tauri-driver`. It opens the corpus EPUB, checks the book's `<script>` didn't run, turns pages, uses the TOC, returns to the library, opens the PDF, scrolls, searches, and saves screenshots. It also verifies that releasing right-click keeps the book menu open, adds a book to a collection, and checks keyboard access and menu dismissal. CI runs it under Xvfb on Linux WebKit and uploads the screenshots.
 
 Useful environment variables:
 
