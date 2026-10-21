@@ -41,7 +41,8 @@ jobs:
             cp "$(find "$d" -name '*.msi' | head -1)"       "release/BiblioChad-$arch.msi"
             cp "$(find "$d" -name 'BiblioChad-portable-*.zip' | head -1)" "release/BiblioChad-Portable-$arch.zip"
           done
-          cp dist/bibliochad-linux-x64/bibliochad-*.pkg.tar.zst release/bibliochad-x86_64.pkg.tar.zst
+          # Arch also produces bibliochad-debug; publish only the app package.
+          cp dist/bibliochad-linux-x64/bibliochad-[0-9]*.pkg.tar.zst release/bibliochad-x86_64.pkg.tar.zst
           (cd release && sha256sum * > SHA256SUMS.txt)
           ls -la release
       - name: Work out the tag
