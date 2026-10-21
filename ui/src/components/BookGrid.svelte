@@ -90,7 +90,7 @@
 
   function key(e: KeyboardEvent, book: BookSummary) {
     if (e.target !== e.currentTarget) return
-    if (e.key === 'Enter') onOpen(book.id)
+    if (e.key === 'Enter' && !context) onOpen(book.id)
     if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
       openContext(e, book)
     }
@@ -112,7 +112,11 @@
           tabindex="0"
           aria-label="Open {b.title}"
           title={b.title}
-          onclick={() => onOpen(b.id)}
+          onclick={(e) => {
+            // Some WebKit input paths synthesize a primary click when the
+            // opening context-menu gesture ends. Keep the menu in place.
+            if (e.button === 0 && !context) onOpen(b.id)
+          }}
           onkeydown={(e) => key(e, b)}
           oncontextmenu={(e) => openContext(e, b)}
         >
@@ -127,7 +131,7 @@
                   aria-label="Details for {b.title}"
                   onclick={(e) => {
                     e.stopPropagation()
-                    onDetails(b.id)
+                    if (!context) onDetails(b.id)
                   }}>⋯</button
                 >
               </div>
@@ -146,7 +150,7 @@
               aria-label="Details for {b.title}"
               onclick={(e) => {
                 e.stopPropagation()
-                onDetails(b.id)
+                if (!context) onDetails(b.id)
               }}>⋯</button
             >
           {/if}
