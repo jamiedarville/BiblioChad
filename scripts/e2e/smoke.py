@@ -157,16 +157,17 @@ try:
     wait(lambda: js("return !document.querySelector('.book-menu')"), what="Escape dismissal")
     js("document.querySelector('.item').dispatchEvent(new KeyboardEvent('keydown', {key: 'ContextMenu', bubbles: true}))")
     wait(lambda: js("return document.querySelector('.book-menu')?.matches(':popover-open')"), what="menu before outside click")
-    # An outside primary-button press still dismisses the manual popover.
-    call("POST", f"{S}/actions", {"actions": [{
-        "type": "pointer", "id": "mouse", "parameters": {"pointerType": "mouse"},
-        "actions": [
-            {"type": "pointerMove", "duration": 0, "origin": "viewport", "x": 2, "y": 2},
-            {"type": "pointerDown", "button": 0},
-            {"type": "pointerUp", "button": 0},
-        ],
-    }]})
-    wait(lambda: js("return !document.querySelector('.book-menu')"), what="outside-click dismissal")
+    # Target a visible element rather than the viewport corner, which can
+    # hit GTK window decorations in WebKitWebDriver.
+    outside = js("return document.querySelector('.brand h1')")
+    outside_id = outside["element-6066-11e4-a52e-4f735466cecf"]
+    call("POST", f"{S}/element/{outside_id}/click", {})
+    try:
+        wait(lambda: js("return !document.querySelector('.book-menu')"), what="outside-click dismissal")
+    except AssertionError:
+        print("outside-click diagnostics:", js("return {events: window.menuEvents, menu: document.querySelector('.book-menu')?.outerHTML}"), flush=True)
+        shot("04-failed-outside-click")
+        raise
     check(True, "keyboard opening, Escape and outside-click dismissal work")
 
     print("PDF renders through PDFium")
