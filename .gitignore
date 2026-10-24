@@ -9,3 +9,12 @@ node_modules/
 /test-corpus/
 .vexp/
 .claude/
+
+# Android upload keys and local tool configuration
+*.jks
+*.keystore
+**/local.properties
+**/keystore.properties
+**/__pycache__/
+
+/dist/

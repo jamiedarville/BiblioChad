@@ -144,6 +144,7 @@
 </div>
 
 <style>
+
   .top {
     display: flex;
     gap: 18px;
@@ -218,5 +219,11 @@
   .end {
     justify-content: flex-end;
     margin-top: 16px;
+  }
+
+  @media (max-width: 600px) {
+    .top { flex-direction: column; }
+    .cov { width: 100px; }
+    .row { flex-wrap: wrap; }
   }
 </style>

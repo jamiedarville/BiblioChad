@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { confirmAction } from '../lib/dialogs'
+  import { isAndroid } from '../lib/platform'
   import { onMount } from 'svelte'
   import { open as openDialog } from '@tauri-apps/plugin-dialog'
   import { openUrl } from '@tauri-apps/plugin-opener'
@@ -24,6 +26,7 @@
   let cache = $state<CacheStats | null>(null)
   let info = $state<AppInfo | null>(null)
   let stats = $state<Stats | null>(null)
+  const privacyUrl = import.meta.env.VITE_BIBLIOCHAD_PRIVACY_URL as string | undefined
   let connecting = $state(false)
   let picking = $state(false)
   let stack = $state<FolderEntry[]>([])
@@ -122,7 +125,7 @@
     const msg = wipe
       ? 'Disconnect Google Drive and delete all local data (cache, covers, progress, highlights, collections)? Progress already synced to your Drive stays there.'
       : 'Disconnect Google Drive? Your local progress and notes are kept.'
-    if (!confirm(msg)) return
+    if (!(await confirmAction(msg))) return
     try {
       await api.driveDisconnect(wipe)
       toasts.push('info', wipe ? 'Disconnected and wiped.' : 'Disconnected.')
@@ -148,6 +151,7 @@
   <main>
     <section class="card">
       <h2>Google Drive</h2>
+      {#if isAndroid}<p class="muted">Drive is optional. Google handles account selection and permissions. Your books remain private; BiblioChad only writes reading progress and highlights to its hidden app-data folder.</p>{/if}
       {#if status}
         {#if !status.configured}
           <p>
@@ -182,10 +186,21 @@
       {/if}
     </section>
 
+    {#if isAndroid}
+      <section class="card">
+        <h2>Privacy</h2>
+        <p>Imported books, reading positions, highlights and collections are stored privately on this device. There are no ads or analytics in BiblioChad. Optional Drive sync sends reading data directly to your Google Drive app-data folder.</p>
+        <p>Disconnect Drive above to stop sync. To remove all local copies and reading data, use Android Settings → Apps → BiblioChad → Storage → Clear storage. This does not delete your original books or the sync file in Google Drive.</p>
+        {#if privacyUrl?.startsWith('https://')}
+          <button onclick={() => openUrl(privacyUrl!).catch((e) => toasts.push('error', errorMessage(e)))}>Privacy policy</button>
+        {/if}
+      </section>
+    {/if}
+
     <section class="card">
       <h2>Appearance</h2>
       <div class="row wrap">
-        {#each [['system', 'Match Windows'], ['light', 'Light'], ['sepia', 'Sepia'], ['dark', 'Dark']] as [t, l]}
+        {#each [['system', 'Match device'], ['light', 'Light'], ['sepia', 'Sepia'], ['dark', 'Dark']] as [t, l]}
           <button class:primary={prefs.value.theme === t} onclick={() => prefs.update((p) => (p.theme = t as typeof p.theme))}>{l}</button>
         {/each}
       </div>
@@ -266,6 +281,7 @@
 {/if}
 
 <style>
+
   .settings {
     height: 100%;
     display: flex;
@@ -379,5 +395,10 @@
     width: 100%;
     text-align: left;
     border-radius: 0;
+  }
+
+  @media (max-width: 600px) {
+    main { padding: 12px; }
+    .row { flex-wrap: wrap; }
   }
 </style>

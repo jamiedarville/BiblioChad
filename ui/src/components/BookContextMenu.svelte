@@ -30,12 +30,27 @@
   $effect(() => {
     // Reposition after the picker or its collection list changes size.
     void [choosing, loading, collections.length]
-    tick().then(() => {
-      if (!panel?.isConnected) return
-      const bounds = panel.getBoundingClientRect()
-      left = Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))
-      top = Math.max(8, Math.min(y, window.innerHeight - bounds.height - 8))
-    })
+    tick().then(reposition)
+  })
+
+  function reposition() {
+    if (!panel?.isConnected) return
+    const bounds = panel.getBoundingClientRect()
+    left = Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))
+    const nativeHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--android-visible-height'))
+    const height = Math.min(window.innerHeight, nativeHeight || Infinity, window.visualViewport?.height ?? Infinity)
+    const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--android-safe-top')) || 0
+    top = Math.max(safeTop + 8, Math.min(y, height - bounds.height - 8))
+  }
+
+  $effect(() => {
+    const viewport = window.visualViewport
+    viewport?.addEventListener('resize', reposition)
+    window.addEventListener('android-viewport', reposition)
+    return () => {
+      viewport?.removeEventListener('resize', reposition)
+      window.removeEventListener('android-viewport', reposition)
+    }
   })
 
   async function chooseCollection() {
@@ -114,7 +129,7 @@
   }
 </script>
 
-<svelte:window onresize={onClose} onmousedown={dismissOutside} onkeydown={escape} />
+<svelte:window onresize={reposition} onmousedown={dismissOutside} onkeydown={escape} />
 
 <div
   bind:this={panel}
@@ -166,7 +181,7 @@
     padding: 6px;
     min-width: 190px;
     max-width: calc(100vw - 16px);
-    max-height: calc(100vh - 16px);
+    max-height: calc(var(--android-visible-height, 100vh) - var(--android-safe-top, 0px) - 16px);
     overflow: auto;
     color: var(--text);
   }

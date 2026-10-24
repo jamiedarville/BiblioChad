@@ -210,3 +210,35 @@ a {
     animation: none !important;
   }
 }
+
+/* Respect display cutouts and gesture navigation on phones. */
+#app {
+  height: var(--android-visible-height, 100%);
+  padding-top: max(env(safe-area-inset-top), var(--android-safe-top, 0px));
+  padding-right: max(env(safe-area-inset-right), var(--android-safe-right, 0px));
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: max(env(safe-area-inset-left), var(--android-safe-left, 0px));
+}
+.text-prompt { width: min(400px, calc(100vw - 32px)); color: var(--text); }
+.text-prompt form, .text-prompt label { display: grid; gap: 12px; }
+.text-prompt::backdrop { background: rgb(0 0 0 / 0.45); }
+@media (pointer: coarse) {
+  button, input, select { min-height: 44px; }
+  button.icon { min-width: 44px; }
+}
+.modal-backdrop {
+  bottom: auto;
+  height: var(--android-visible-height, 100%);
+}
+.modal, .text-prompt {
+  max-height: calc(var(--android-visible-height, 100vh) - 32px);
+}
+.text-prompt {
+  position: fixed;
+  top: calc(var(--android-visible-height, 100vh) / 2);
+  bottom: auto;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  overflow: auto;
+}

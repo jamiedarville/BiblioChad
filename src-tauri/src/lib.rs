@@ -4,6 +4,8 @@ mod books;
 mod commands;
 mod drive_sync;
 mod error;
+#[cfg(target_os = "android")]
+mod mobile;
 mod protocol;
 mod state;
 
@@ -86,7 +88,10 @@ fn pdfium_lib_name() -> &'static str {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(mobile::init());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .register_asynchronous_uri_scheme_protocol("bibliochad", |ctx, request, responder| {
@@ -96,6 +101,9 @@ pub fn run() {
             });
         })
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            let paths = AppPaths::at(app.path().app_data_dir()?.join("files"));
+            #[cfg(not(target_os = "android"))]
             let paths = match std::env::var("BIBLIOCHAD_DATA_DIR") {
                 Ok(d) => AppPaths::at(d),
                 Err(_) => AppPaths::platform_default()?,
@@ -114,7 +122,11 @@ pub fn run() {
             }
             // Files passed on the command line ("Open with BiblioChad", or
             // the file association) are imported, and the first is opened.
+            #[cfg(not(target_os = "android"))]
             let mut first = None;
+            #[cfg(target_os = "android")]
+            let first = None;
+            #[cfg(not(target_os = "android"))]
             for arg in std::env::args_os().skip(1) {
                 let path = PathBuf::from(arg);
                 if path.is_file() {
@@ -132,7 +144,7 @@ pub fn run() {
             // Restore the Drive session and keep the library fresh.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                handle.state::<AppState>().restore_drive().await;
+                handle.state::<AppState>().restore_drive(&handle).await;
                 let _ = handle.emit("library-changed", ());
                 loop {
                     if let Err(e) = drive_sync::sync_all(handle.clone()).await {
@@ -199,6 +211,9 @@ pub fn run() {
             commands::clear_cache,
             commands::app_info,
             commands::take_pending_open,
+            commands::background_app,
+            commands::refresh_android_viewport,
+            commands::import_sample_book,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BiblioChad");

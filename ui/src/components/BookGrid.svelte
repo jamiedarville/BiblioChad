@@ -1,6 +1,7 @@
 <script lang="ts">
   // Virtualized grid/list: only rows near the viewport are rendered, so a
   // 5,000-book library scrolls smoothly.
+  import { isAndroid } from '../lib/platform'
   import type { BookSummary } from '../lib/api'
   import Cover from './Cover.svelte'
   import BookContextMenu from './BookContextMenu.svelte'
@@ -128,10 +129,10 @@
                 <span class="author">{b.author ?? ''}</span>
                 <button
                   class="ghost icon more"
-                  aria-label="Details for {b.title}"
+                  aria-label="{isAndroid ? 'Actions' : 'Details'} for {b.title}"
                   onclick={(e) => {
                     e.stopPropagation()
-                    if (!context) onDetails(b.id)
+                    if (!context) { if (isAndroid) openContext(e, b); else onDetails(b.id) }
                   }}>⋯</button
                 >
               </div>
@@ -147,10 +148,10 @@
             {#if b.favorite}<span title="Favorite">★</span>{/if}
             <button
               class="ghost icon"
-              aria-label="Details for {b.title}"
+              aria-label="{isAndroid ? 'Actions' : 'Details'} for {b.title}"
               onclick={(e) => {
                 e.stopPropagation()
-                if (!context) onDetails(b.id)
+                if (!context) { if (isAndroid) openContext(e, b); else onDetails(b.id) }
               }}>⋯</button
             >
           {/if}
@@ -222,6 +223,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+
   .more {
     min-height: 22px;
     padding: 0 6px;
@@ -266,5 +269,13 @@
     text-align: right;
     color: var(--text-2);
     font-variant-numeric: tabular-nums;
+  }
+
+  @media (pointer: coarse) {
+    .item .more { opacity: 1; min-height: 44px; min-width: 44px; }
+  }
+  @media (max-width: 600px) {
+    .row.list .item { gap: 6px; padding: 4px; }
+    .pct { width: 40px; font-size: 11px; }
   }
 </style>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { isAndroid } from '../lib/platform'
+  import { askText } from '../lib/dialogs'
   import { onMount } from 'svelte'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import {
@@ -142,6 +144,7 @@
   }
 
   async function fullscreen() {
+    if (isAndroid) { chromeVisible = !chromeVisible; return }
     const w = getCurrentWindow()
     await w.setFullscreen(!(await w.isFullscreen()))
   }
@@ -167,7 +170,7 @@
     if (!selection || !book) return
     const sel = selection
     selection = null
-    const note = withNote ? prompt_('Note') : null
+    const note = withNote ? (await askText('Note'))?.trim() ?? null : null
     if (withNote && note === null) return
     try {
       const loc: EpubLocator = { kind: 'epub', cfi: sel.cfi, percent: sel.percent }
@@ -177,11 +180,6 @@
     } catch (e) {
       toasts.push('error', errorMessage(e))
     }
-  }
-
-  function prompt_(title: string, value = ''): string | null {
-    const v = window.prompt(title, value)
-    return v === null ? null : v.trim()
   }
 
   async function copySelection() {
@@ -286,7 +284,7 @@
       <button class="ghost icon" class:on={panel === 'search'} title="Search (Ctrl+F)" aria-label="Search in book" onclick={() => (panel = panel === 'search' ? null : 'search')}><Icon name="search" /></button>
       <button class="ghost icon" class:on={panel === 'style'} title="Display settings" aria-label="Display settings" onclick={() => (panel = panel === 'style' ? null : 'style')}><Icon name="type" /></button>
       <button class="ghost icon" title="Add bookmark (Ctrl+D)" aria-label="Add bookmark" onclick={addBookmark}><Icon name="bookmark-add" /></button>
-      <button class="ghost icon" title="Fullscreen (F11)" aria-label="Toggle fullscreen" onclick={fullscreen}><Icon name="fullscreen" /></button>
+      <button class="ghost icon" title={isAndroid ? 'Hide reading controls' : 'Fullscreen (F11)'} aria-label={isAndroid ? 'Toggle reading controls' : 'Toggle fullscreen'} onclick={fullscreen}><Icon name="fullscreen" /></button>
     </div>
   </header>
 
@@ -488,6 +486,7 @@
 {/if}
 
 <style>
+
   .reader {
     height: 100%;
     display: flex;
@@ -709,5 +708,15 @@
     padding-left: 12px;
     border-left: 3px solid var(--accent);
     color: var(--text-2);
+  }
+
+  @media (max-width: 600px) {
+    .bar { flex-wrap: wrap; padding: 6px 8px; gap: 4px; }
+    header .title { flex-basis: 45%; min-width: 0; }
+    header .row { overflow-x: auto; max-width: 100%; gap: 2px; }
+    .panel { position: absolute; inset: 0; width: 100%; z-index: 10; }
+    .panel.right { border-left: 0; }
+    .loc { min-width: 0; max-width: 35%; }
+    .selbar { max-width: calc(100% - 16px); flex-wrap: wrap; }
   }
 </style>
