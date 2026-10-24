@@ -1,5 +1,8 @@
 //! OAuth 2.0 for installed apps: loopback redirect + PKCE (RFC 8252/7636).
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -263,7 +266,13 @@ pub struct Auth {
     inner: Arc<AuthInner>,
 }
 
+/// Native platforms supply short-lived access tokens without storing an OAuth
+/// client secret or refresh token in the app. `true` requests cache invalidation.
+pub type AccessTokenFuture = Pin<Box<dyn Future<Output = Result<String>> + Send>>;
+
 struct AuthInner {
+    provider: Option<Arc<dyn Fn(bool) -> AccessTokenFuture + Send + Sync>>,
+    invalidated: AtomicBool,
     client: Option<OAuthClient>,
     http: reqwest::Client,
     access: Mutex<Option<(String, Instant)>>,
@@ -273,6 +282,8 @@ impl Auth {
     pub fn new(client: OAuthClient, http: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(AuthInner {
+                provider: None,
+                invalidated: AtomicBool::new(false),
                 client: Some(client),
                 http,
                 access: Mutex::new(None),
@@ -284,12 +295,31 @@ impl Auth {
     pub fn fixed(token: &str) -> Self {
         Self {
             inner: Arc::new(AuthInner {
+                provider: None,
+                invalidated: AtomicBool::new(false),
                 client: None,
                 http: reqwest::Client::new(),
                 access: Mutex::new(Some((
                     token.into(),
                     Instant::now() + Duration::from_secs(10 * 365 * 86400),
                 ))),
+            }),
+        }
+    }
+
+    /// Use a platform authorization service (Google Identity Services on Android).
+    /// Tokens are cached for at most 45 minutes and retried after a 401.
+    pub fn with_provider(
+        token: String,
+        provider: impl Fn(bool) -> AccessTokenFuture + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            inner: Arc::new(AuthInner {
+                provider: Some(Arc::new(provider)),
+                invalidated: AtomicBool::new(false),
+                client: None,
+                http: reqwest::Client::new(),
+                access: Mutex::new(Some((token, Instant::now() + Duration::from_secs(45 * 60)))),
             }),
         }
     }
@@ -301,7 +331,8 @@ impl Auth {
 
     /// Forget the cached access token (e.g. after a 401).
     pub async fn invalidate(&self) {
-        if self.inner.client.is_some() {
+        if self.inner.client.is_some() || self.inner.provider.is_some() {
+            self.inner.invalidated.store(true, Ordering::SeqCst);
             *self.inner.access.lock().await = None;
         }
     }
@@ -315,6 +346,11 @@ impl Auth {
             if Instant::now() < *exp {
                 return Ok(t.clone());
             }
+        }
+        if let Some(provider) = &self.inner.provider {
+            let token = provider(self.inner.invalidated.swap(false, Ordering::SeqCst)).await?;
+            *guard = Some((token.clone(), Instant::now() + Duration::from_secs(45 * 60)));
+            return Ok(token);
         }
         let client = self
             .inner
@@ -385,6 +421,41 @@ mod tests {
         c.token_uri = format!("{}/token", server.uri());
         c.revoke_uri = format!("{}/revoke", server.uri());
         c
+    }
+
+    #[tokio::test]
+    async fn native_tokens_are_cached_and_renewed_after_invalidation() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = calls.clone();
+        let auth = Auth::with_provider("initial".into(), move |invalidate| {
+            assert!(invalidate);
+            count.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async { Ok("renewed".into()) })
+        });
+        let store = MemoryStore::default();
+        assert_eq!(auth.access_token(&store).await.unwrap(), "initial");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        auth.invalidate().await;
+        assert_eq!(auth.access_token(&store).await.unwrap(), "renewed");
+        assert_eq!(auth.access_token(&store).await.unwrap(), "renewed");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            store.load().unwrap(),
+            None,
+            "native tokens are never persisted"
+        );
+    }
+
+    #[tokio::test]
+    async fn native_authorization_failures_do_not_return_a_stale_token() {
+        let auth = Auth::with_provider("expired".into(), |_| {
+            Box::pin(async { Err(DriveError::ReauthRequired) })
+        });
+        auth.invalidate().await;
+        assert!(matches!(
+            auth.access_token(&MemoryStore::default()).await,
+            Err(DriveError::ReauthRequired)
+        ));
     }
 
     #[test]

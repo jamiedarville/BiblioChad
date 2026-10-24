@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android-browser",
+  "description": "Open the configured privacy policy in the device browser",
+  "platforms": ["android"],
+  "windows": ["main"],
+  "permissions": [{ "identifier": "opener:allow-open-url", "allow": [{ "url": "https://*" }] }]
+}

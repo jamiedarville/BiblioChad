@@ -2,7 +2,7 @@
 
 # BiblioChad
 
-> An ebook reader for Windows (ARM64 and x64) and Linux (x64), written in Rust, whose library *is* your Google Drive folder tree.
+> An ebook reader for Windows (ARM64 and x64), Linux (x64), and Android (ARM64), written in Rust, whose library *is* your Google Drive folder tree.
 > Reads PDF and EPUB, remembers where you stopped, and has the personality of a man who finishes every book he starts.
 
 **Finish the book.**
@@ -51,6 +51,36 @@ The Google Drive sign-in is kept in your desktop keyring through the Secret Serv
 - Releases now include an **Arch Linux x86_64 package**, alongside Windows x64 and ARM64 installers and portable builds.
 
 Collections are separate from Drive folders, and a book can belong to several. Manage them from the **Collections** tab; use the collection checkboxes in **Book details** to remove a book from a collection.
+
+## Android
+
+BiblioChad also builds as an Android app (Android 8 / API 26 and newer), using the
+same library, EPUB reader, PDFium PDF reader, collections, and optional Drive sync.
+The phone UI includes touch-accessible book actions, Back navigation, private
+file imports through Android's document picker, and a sample book without login.
+Android Drive sign-in uses Google Identity Services, not the desktop OAuth JSON.
+
+With JDK 17, Android SDK Platform 36 / Build-Tools 36.0.0, NDK 28.2.13676358,
+Node.js and Rust installed, set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME`, then:
+
+```bash
+rustup target add aarch64-linux-android
+npm ci && npm --prefix ui ci
+npm run android:init
+npm run android:apk
+```
+
+The debug APK is under
+`src-tauri/gen/android/app/build/outputs/apk/universal/debug/`. The **Build Android**
+GitHub Actions workflow also produces a debug APK. Keep custom native edits in
+`mobile/android` and the setup scripts: `src-tauri/gen/android` is regenerated.
+PDFium downloads are pinned, checksum-verified, and checked for 16 KB alignment.
+
+For signed Play bundles, OAuth certificate registration, privacy disclosures,
+testing and submission, follow **[playstore.md](playstore.md)**. It includes the
+steps you must complete in your own Google accounts; generating an APK does not
+publish it or obtain Google approval. An editable privacy-policy draft is in
+[`mobile/privacy-policy-template.md`](mobile/privacy-policy-template.md).
 
 ## What works today
 

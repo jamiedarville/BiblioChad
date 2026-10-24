@@ -1,14 +1,14 @@
 // Small pure helpers (unit tested in util.test.ts).
 
-/** URL for the bibliochad:// custom protocol. WebView2 on Windows serves
+/** URL for the bibliochad:// custom protocol. Android WebView and WebView2 on Windows serve
  * custom schemes as http://<scheme>.localhost/. */
-export function protoUrl(path: string, isWindows = detectWindows()): string {
+export function protoUrl(path: string, isWindows = detectHttpProtocol()): string {
   const clean = path.replace(/^\/+/, '')
   return isWindows ? `http://bibliochad.localhost/${clean}` : `bibliochad://localhost/${clean}`
 }
 
-function detectWindows(): boolean {
-  return typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+function detectHttpProtocol(): boolean {
+  return typeof navigator !== 'undefined' && /Windows|Android/i.test(navigator.userAgent)
 }
 
 /** Encode an archive path for the URL, segment by segment. */

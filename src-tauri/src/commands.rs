@@ -1,9 +1,11 @@
 //! Tauri commands. The UI is thin: everything it shows comes from here.
 
 use std::path::PathBuf;
+#[cfg(not(target_os = "android"))]
 use std::time::Duration;
 
 use bc_core::{BookFormat, Locator, ReadStatus};
+#[cfg(not(target_os = "android"))]
 use bc_drive::{Auth, PendingAuth};
 use bc_library::{
     Annotation, BookDetails, BookQuery, BookSummary, Bookmark, CacheStats, Collection,
@@ -13,6 +15,7 @@ use bc_reader::pdf::{OutlineItem, SearchHit, TextRun};
 use bc_sync::ResumePrompt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(not(target_os = "android"))]
 use tauri_plugin_opener::OpenerExt;
 
 use crate::books;
@@ -182,7 +185,21 @@ pub async fn import_local_files(app: AppHandle, paths: Vec<String>) -> CmdResult
         let mut imported = Vec::new();
         let mut failed = Vec::new();
         for p in paths {
-            match books::import_local_file(&state, &PathBuf::from(&p)) {
+            #[cfg(target_os = "android")]
+            let path = if p.starts_with("content://") {
+                match crate::mobile::import_document(&app2, &p) {
+                    Ok(path) => path,
+                    Err(e) => {
+                        failed.push(format!("{p}: {}", e.message));
+                        continue;
+                    }
+                }
+            } else {
+                PathBuf::from(&p)
+            };
+            #[cfg(not(target_os = "android"))]
+            let path = PathBuf::from(&p);
+            match books::import_local_file(&state, &path) {
                 Ok(id) => imported.push(id),
                 Err(e) => failed.push(format!("{p}: {}", e.message)),
             }
@@ -196,12 +213,29 @@ pub async fn import_local_files(app: AppHandle, paths: Vec<String>) -> CmdResult
 
 #[tauri::command]
 pub fn remove_local_book(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
-    Ok(state.lib.remove_local(id)?)
+    #[cfg(target_os = "android")]
+    let imported = state.lib.book_source(id)?.local_path.map(PathBuf::from);
+    state.lib.remove_local(id)?;
+    #[cfg(target_os = "android")]
+    if let Some(path) = imported.filter(|p| p.starts_with(state.paths.root.join("imports"))) {
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn export_annotations(state: State<'_, AppState>, id: i64, dest: String) -> CmdResult<()> {
+pub fn export_annotations(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    dest: String,
+) -> CmdResult<()> {
     let md = state.lib.export_annotations_markdown(id)?;
+    #[cfg(target_os = "android")]
+    if dest.starts_with("content://") {
+        return crate::mobile::write_document(&app, &dest, &md);
+    }
+    let _ = app;
     std::fs::write(dest, md)?;
     Ok(())
 }
@@ -394,7 +428,7 @@ pub struct DriveStatus {
 async fn drive_status_inner(state: &AppState) -> CmdResult<DriveStatus> {
     let source = state.lib.drive_source()?;
     Ok(DriveStatus {
-        configured: state.oauth_client().is_some(),
+        configured: cfg!(target_os = "android") || state.oauth_client().is_some(),
         connected: state.drive().await.is_some(),
         email: state.lib.setting("drive_email")?,
         root_id: source.as_ref().and_then(|s| s.drive_root_id.clone()),
@@ -427,24 +461,32 @@ pub fn drive_import_client_file(state: State<'_, AppState>, path: String) -> Cmd
 
 #[tauri::command]
 pub async fn drive_connect(app: AppHandle, state: State<'_, AppState>) -> CmdResult<DriveStatus> {
-    let client = state.oauth_client().ok_or_else(|| {
+    #[cfg(target_os = "android")]
+    let auth = crate::mobile::drive_auth(&app, true).await?;
+    #[cfg(not(target_os = "android"))]
+    let auth = {
+        let client = state.oauth_client().ok_or_else(|| {
         CmdError::new(
             "not_configured",
             "No Google OAuth client is configured. Import the Desktop-app client JSON from Google Cloud console first.",
         )
     })?;
-    let pending = PendingAuth::begin(&client).await?;
-    app.opener()
-        .open_url(pending.auth_url.clone(), None::<&str>)
-        .map_err(|e| CmdError::internal(format!("could not open the browser: {e}")))?;
-    let auth: Auth = pending
-        .finish(
-            &client,
-            &state.http,
-            state.store.as_ref(),
-            Duration::from_secs(300),
-        )
-        .await?;
+        let pending = PendingAuth::begin(&client).await?;
+        app.opener()
+            .open_url(pending.auth_url.clone(), None::<&str>)
+            .map_err(|e| CmdError::internal(format!("could not open the browser: {e}")))?;
+        let auth: Auth = pending
+            .finish(
+                &client,
+                &state.http,
+                state.store.as_ref(),
+                Duration::from_secs(300),
+            )
+            .await?;
+        auth
+    };
+    #[cfg(target_os = "android")]
+    state.lib.set_setting("android_drive_connected", "true")?;
     let drive = state.make_drive_client(auth);
     if let Ok(Some(email)) = drive.account_email().await {
         state.lib.set_setting("drive_email", &email)?;
@@ -548,6 +590,15 @@ pub async fn drive_disconnect(
     } else {
         state.store.clear()?;
     }
+    #[cfg(target_os = "android")]
+    {
+        state.lib.delete_setting("android_drive_connected")?;
+        // Local sign-out must still succeed offline. A failed revocation is
+        // logged so local sign-out is not blocked by a network failure.
+        if let Err(e) = crate::mobile::revoke(&app).await {
+            tracing::warn!("Google grant revocation failed: {}", e.message);
+        }
+    }
     state.lib.delete_setting("drive_email")?;
     state.lib.delete_setting("sync_file_id")?;
     if wipe {
@@ -556,6 +607,10 @@ pub async fn drive_disconnect(
             books::remove_cached_file(&state, std::path::Path::new(&path));
         }
         state.lib.wipe()?;
+        #[cfg(target_os = "android")]
+        {
+            let _ = std::fs::remove_dir_all(state.paths.root.join("imports"));
+        }
         for dir in [state.paths.cache(), state.paths.covers()] {
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir)?;
@@ -622,4 +677,42 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
 #[tauri::command]
 pub fn take_pending_open(state: State<'_, AppState>) -> Option<i64> {
     state.pending_open.lock().unwrap().take()
+}
+
+#[tauri::command]
+pub async fn background_app(app: AppHandle) -> CmdResult<()> {
+    #[cfg(target_os = "android")]
+    return crate::mobile::background(&app).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(())
+    }
+}
+
+/// A bundled, original sample lets users and store reviewers try EPUB reading
+/// without signing in or granting access to any personal files.
+#[tauri::command]
+pub async fn import_sample_book(app: AppHandle) -> CmdResult<i64> {
+    let path = app
+        .state::<AppState>()
+        .paths
+        .root
+        .join("Welcome to BiblioChad.epub");
+    std::fs::write(&path, include_bytes!("../../assets/sample.epub"))?;
+    let app2 = app.clone();
+    let id = blocking(move || books::import_local_file(&app2.state::<AppState>(), &path)).await?;
+    let _ = app.emit("library-changed", ());
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn refresh_android_viewport(app: AppHandle) -> CmdResult<()> {
+    #[cfg(target_os = "android")]
+    return crate::mobile::refresh_viewport(&app).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(())
+    }
 }
