@@ -7,7 +7,11 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
-    "icons": "tauri icon assets/icon.png --output src-tauri/icons"
+    "icons": "tauri icon assets/icon.png --output src-tauri/icons",
+    "android:init": "bash scripts/android/init.sh",
+    "android:dev": "tauri android dev",
+    "android:apk": "tauri android build --apk --debug --target aarch64 --ci",
+    "android:bundle": "bash scripts/android/bundle.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0"

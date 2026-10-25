@@ -211,6 +211,9 @@ export function errorKind(e: unknown): string | null {
 }
 
 export const api = {
+  backgroundApp: () => invoke<void>('background_app'),
+  refreshAndroidViewport: () => invoke<void>('refresh_android_viewport'),
+  importSampleBook: () => invoke<number>('import_sample_book'),
   overview: () => invoke<Overview>('get_overview'),
   listFolder: (folderId: string | null) => invoke<FolderListing>('list_folder', { folderId }),
   queryBooks: (query: BookQuery) => invoke<BookSummary[]>('query_books', { query }),

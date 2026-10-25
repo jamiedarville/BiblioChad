@@ -1,0 +1,10 @@
+{
+  "app": {
+    "windows": [{ "label": "main", "title": "BiblioChad", "width": 360, "height": 800, "dragDropEnabled": false }]
+  },
+  "bundle": {
+    "targets": [],
+    "resources": [],
+    "android": { "minSdkVersion": 26, "versionCode": 1003 }
+  }
+}

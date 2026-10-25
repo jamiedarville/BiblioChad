@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isAndroid } from './lib/platform'
   import { onMount } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -29,6 +30,7 @@
   })
 
   onMount(() => {
+    if (isAndroid) void api.refreshAndroidViewport().catch((e) => console.warn('Viewport setup failed', e))
     prefs.load().then(async () => {
       const id = await api.takePendingOpen().catch(() => null)
       if (id != null) view = { name: 'reader', bookId: id }
@@ -58,15 +60,33 @@
       }),
     ]
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'F11') {
+      if (e.key === 'F11' && !isAndroid) {
         e.preventDefault()
         const w = getCurrentWindow()
         w.isFullscreen().then((f) => w.setFullscreen(!f))
       }
     }
+    const onBack = async () => {
+      const dialog = document.querySelector<HTMLDialogElement>('dialog[open]')
+      if (dialog) { dialog.close(); return }
+      if (view.name === 'reader' || document.querySelector('.modal-backdrop, .book-menu')) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+        return
+      }
+      await runBeforeClose()
+      if (view.name === 'settings') view = { name: 'library' }
+      else await api.backgroundApp()
+    }
+    const onVisibility = () => { if (document.hidden) void runBeforeClose() }
+    window.addEventListener('android-back', onBack)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', runBeforeClose)
     window.addEventListener('keydown', onKey)
     return () => {
       unlisten.forEach((p) => p.then((u) => u()))
+      window.removeEventListener('android-back', onBack)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', runBeforeClose)
       window.removeEventListener('keydown', onKey)
     }
   })

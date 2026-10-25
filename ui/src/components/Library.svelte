@@ -15,6 +15,8 @@
   import { prefs } from '../lib/prefs.svelte'
   import { toasts } from '../lib/toast.svelte'
   import { emptyLibrary, greeting, rankProgress } from '../lib/chad'
+  import { isAndroid } from '../lib/platform'
+  import { askText, confirmAction } from '../lib/dialogs'
   import BookGrid from './BookGrid.svelte'
   import BookDetails from './BookDetails.svelte'
   import Cover from './Cover.svelte'
@@ -143,8 +145,13 @@
     }
   }
 
+  async function sampleBook() {
+    try { onOpen(await api.importSampleBook()) }
+    catch (e) { toasts.push('error', errorMessage(e)) }
+  }
+
   async function newCollection() {
-    const name = prompt('Collection name')
+    const name = await askText('Collection name')
     if (!name?.trim()) return
     try {
       collectionId = await api.createCollection(name)
@@ -155,7 +162,7 @@
   }
 
   async function removeCollection(c: Collection) {
-    if (!confirm(`Delete the collection “${c.name}”? The books stay in your library.`)) return
+    if (!(await confirmAction(`Delete the collection “${c.name}”? The books stay in your library.`))) return
     await api.deleteCollection(c.id)
     if (collectionId === c.id) collectionId = null
     load()
@@ -281,6 +288,7 @@
               <button class="primary" onclick={onSettings}>Connect Google Drive</button>
             {/if}
             <button onclick={importFiles}>Import files</button>
+            {#if isAndroid}<button onclick={sampleBook}>Try a sample book</button>{/if}
           </div>
         </div>
       {:else if filtering}
@@ -489,6 +497,7 @@
   .fcount {
     font-size: 12px;
   }
+
   .collections {
     flex-wrap: wrap;
     margin-bottom: 16px;
@@ -529,5 +538,15 @@
   }
   .pad {
     padding: 24px 0;
+  }
+
+  @media (max-width: 600px) {
+    header { padding: 10px 12px; gap: 10px; }
+    .brand { min-width: 0; }
+    .tools { flex-wrap: wrap; width: 100%; }
+    .tabs { overflow-x: auto; flex-shrink: 0; padding: 0 8px; }
+    .tab { white-space: nowrap; flex-shrink: 0; }
+    main { padding: 12px; }
+    .collections { flex-wrap: wrap; }
   }
 </style>

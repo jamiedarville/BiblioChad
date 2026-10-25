@@ -1,0 +1,60 @@
+name: Build Android
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'scripts/android/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'ui/**'
+      - '.github/workflows/build-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Android ARM64 · installable debug APK
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: '28.2.13676358'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android-arm64
+      - name: Android SDK and NDK
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' "ndk;$NDK_VERSION"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Dependencies and UI checks
+        run: |
+          npm ci
+          npm --prefix ui ci
+          npm --prefix ui run check
+          npm --prefix ui test
+      - name: Generate native project and package PDFium
+        run: npm run android:init
+      - name: Build APK
+        run: npm run android:apk
+      - name: Verify all native libraries and APK ZIP alignment
+        run: |
+          python3 scripts/android/verify-package.py src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BiblioChad-Android-debug-arm64
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
