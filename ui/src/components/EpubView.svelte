@@ -38,6 +38,36 @@
     onKey: (e: KeyboardEvent) => void
   } = $props()
 
+  const BLOCK = /^(p|div|h[1-6]|li|blockquote|section|article|aside|tr|dt|dd|pre|figcaption|br|hr)$/
+
+  /** Range text with line breaks at block boundaries. */
+  function rangeText(r: Range): string {
+    let out = ''
+    const walk = (n: Node) => {
+      if (n.nodeType === Node.TEXT_NODE) {
+        out += n.nodeValue ?? ''
+      } else if (n.nodeType === Node.ELEMENT_NODE || n.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+        const name = n.nodeType === Node.ELEMENT_NODE ? (n as Element).localName.toLowerCase() : ''
+        if (name === 'script' || name === 'style') return
+        const block = BLOCK.test(name)
+        if (block) out += '\n'
+        n.childNodes.forEach(walk)
+        if (block) out += '\n'
+      }
+    }
+    walk(r.cloneContents())
+    return out
+      .replace(/[ \t\u00a0]+/g, ' ')
+      .replace(/ *\n[\s]*/g, '\n')
+      .trim()
+  }
+
+  function clip(s: string, max: number): string {
+    if (s.length <= max) return s
+    const cut = s.lastIndexOf(' ', max)
+    return s.slice(0, cut > max * 0.8 ? cut : max) + '…'
+  }
+
   let host: HTMLDivElement
   let view: FoliateView | null = null
   let percent = 0
@@ -177,6 +207,35 @@
   }
   export function clearSearch() {
     view?.clearSearch()
+  }
+
+  /**
+   * The text on screen plus some context either side, for the learning
+   * assistant. Markers tell the model where the reader's screen is.
+   */
+  export function passage(): string {
+    const range = (view?.lastLocation as { range?: Range } | null)?.range
+    const doc = range?.startContainer.ownerDocument
+    if (!range || !doc?.body) return ''
+    const visible = clip(rangeText(range), 8000)
+    const before = doc.createRange()
+    before.selectNodeContents(doc.body)
+    before.setEnd(range.startContainer, range.startOffset)
+    const after = doc.createRange()
+    after.selectNodeContents(doc.body)
+    after.setStart(range.endContainer, range.endOffset)
+    const prev = rangeText(before).slice(-1500)
+    const next = clip(rangeText(after), Math.max(1500, 9000 - visible.length))
+    return [
+      prev && `${prev}\n`,
+      "[The reader's screen starts here]",
+      visible,
+      "[The reader's screen ends here]",
+      next && `\n${next}`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .trim()
   }
 </script>
 

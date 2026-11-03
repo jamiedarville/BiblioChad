@@ -82,6 +82,28 @@ steps you must complete in your own Google accounts; generating an APK does not
 publish it or obtain Google approval. An editable privacy-policy draft is in
 [`mobile/privacy-policy-template.md`](mobile/privacy-policy-template.md).
 
+## Learning zone (bring your own LLM key)
+
+Open the **Learning zone** panel (the ◎ ring button in the reader's toolbar) to map your
+[Zone of Proximal Development](https://en.wikipedia.org/wiki/Zone_of_proximal_development) for the page you're on:
+
+- **You've got this**: ideas on the page you can already handle alone, as anchors.
+- **Your zone**: 2–4 ideas just out of reach. Each has a *Try it* question and three hints
+  that go from a light nudge to a worked step, then a full explanation. Reveal only as much help as you need.
+- **Not yet**: ideas that need more groundwork first, and when to come back to them.
+- **Check yourself** questions and a suggested next step.
+
+Tell it what you already know and why you're reading the book, and it tailors each map to you. Rate a map
+**Too easy**, **Just right** or **Too hard**: the book's *stretch* level (1–5) moves, and the next map adjusts.
+Earlier maps feed into later ones, and your highlights on the page are included as hints about what caught your eye.
+
+Set it up in **Settings → Learning assistant**. Anthropic (default model `claude-opus-5-5`) and any
+OpenAI-compatible endpoint (OpenAI, OpenRouter, or a local Ollama / LM Studio server) are supported. The key is
+stored in the system keychain (Android: private app storage). Nothing is sent until you press **Map my zone**;
+then the page text, your background and goal, and highlights on that page go straight to your provider, and its
+charges apply. Maps are saved locally and are not synced to Drive. The code is in `crates/bc-tutor` and
+`ui/src/components/ZonePanel.svelte`.
+
 ## What works today
 
 | Area | Status |
@@ -95,6 +117,7 @@ publish it or obtain Google approval. An editable privacy-policy draft is in
 | **Offline**: LRU cache with a size cap, "Keep offline" pinning, clear cache | ✅ |
 | Local metadata edits, Markdown export of highlights, local file import, "Open with BiblioChad" for .epub/.pdf | ✅ |
 | Chad Mode (jokes, ranks, streaks, achievements) with an off switch | ✅ |
+| **Learning zone**: per-page Zone of Proximal Development maps with graduated hints, self-checks and difficulty feedback, using your own Anthropic or OpenAI-compatible API key | ✅ |
 | **Windows installers** (NSIS + MSI + portable zip) for **ARM64** (`windows-11-arm` runner) and **x64** (`windows-latest`) | ✅ in CI |
 | **Arch Linux package** (`packaging/arch/PKGBUILD`, x86_64) | ✅ in CI |
 | PDF highlights, footnote pop-ups, TTS, reading stats beyond streaks | ❌ not yet (P1/P2) |
@@ -108,6 +131,7 @@ crates/
   bc-library/   SQLite schema + migrations, Drive mirror, queries, progress, notes, cache, sync import/export
   bc-sync/      the sync document and its commutative merge (LWW per book, tombstoned notes)
   bc-drive/     OAuth (loopback + PKCE), keyring token store, Drive v3 client
+  bc-tutor/     learning assistant: ZPD prompt + JSON schema, Anthropic and OpenAI-compatible clients
 src-tauri/      app shell: commands, bibliochad:// protocol, Drive sync glue, packaging
 ui/             Svelte 5 + TypeScript UI; vendored foliate-js under ui/src/vendor
 packaging/arch/ PKGBUILD and desktop entry for Arch Linux

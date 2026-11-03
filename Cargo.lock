@@ -358,6 +358,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bc-tutor"
+version = "0.1.2"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
 name = "bibliochad"
 version = "0.1.2"
 dependencies = [
@@ -366,6 +379,7 @@ dependencies = [
  "bc-library",
  "bc-reader",
  "bc-sync",
+ "bc-tutor",
  "chrono",
  "hex",
  "lru",

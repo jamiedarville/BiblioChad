@@ -2,7 +2,8 @@
 //!
 //! The library mirrors a Drive folder tree in `nodes`, keeps one row per
 //! distinct book file in `books`, and stores everything the user does
-//! (progress, bookmarks, highlights, collections) locally. Drive is never
+//! (progress, bookmarks, highlights, collections, learning-assistant maps)
+//! locally. Drive is never
 //! written to; overrides live only here.
 
 mod cache;
@@ -15,6 +16,7 @@ mod query;
 mod schema;
 mod settings;
 mod sync;
+mod zones;
 
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -28,6 +30,7 @@ pub use nodes::{Breadcrumb, FolderListing, FolderSummary, NodeRecord, Source, So
 pub use notes::{Annotation, Bookmark, NewAnnotation};
 pub use progress::{ProgressRecord, Stats};
 pub use query::{BookDetails, BookQuery, BookSource, BookSummary, SortKey};
+pub use zones::{ZoneFeedback, ZoneMap, ZoneProfile};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LibraryError {
@@ -93,7 +96,7 @@ impl Library {
     pub fn wipe(&self) -> Result<()> {
         let c = self.conn();
         c.execute_batch(
-            "DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
+            "DELETE FROM zone_maps; DELETE FROM zone_profiles; DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
              DELETE FROM bookmarks; DELETE FROM progress; DELETE FROM cache_entries;
              DELETE FROM books; DELETE FROM nodes; DELETE FROM sources; DELETE FROM accounts;
              DELETE FROM reading_days; DELETE FROM settings WHERE key <> 'device_id';",

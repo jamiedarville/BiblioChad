@@ -15,6 +15,7 @@
     'sort-desc': 'M12 5v14M6 13l6 6 6-6',
     close: 'M6 6l12 12M18 6L6 18',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
+    zone: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM12 12h.01',
   }
   let { name, size = 18, label }: { name: string; size?: number; label?: string } = $props()
 </script>

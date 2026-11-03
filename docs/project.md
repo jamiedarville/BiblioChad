@@ -158,6 +158,7 @@ Priority: **P0** = v1 must have, **P1** = v1 should have, **P2** = after v1.
 - P0 Remember and restore position
 - P0 Light/dark themes; fullscreen
 - P1 Bookmarks; in-book text search; jump-back history
+- P1 Learning zone: per-page Zone of Proximal Development maps (known / reachable with hints / not yet), self-checks and difficulty feedback, using the user's own LLM API key (Anthropic or OpenAI-compatible). Sends text only when asked; no BiblioChad server.
 
 ### EPUB specifics
 - P0 Paginated and continuous-scroll modes; font family/size, line spacing, margins, justification

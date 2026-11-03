@@ -25,6 +25,15 @@ hidden BiblioChad app-data folder in your Google Drive. Your ebook files are not
 modified. No BiblioChad-operated server receives your books or reading data.
 Google processes data under its own privacy policy and service terms.
 
+The learning assistant is optional and off until you add an API key for an AI
+provider you choose (for example Anthropic). When you ask it to map a page, the
+app sends that page's text, the background and goal you entered for that book,
+and your highlights on that page directly from your device to that provider,
+using your key. The provider processes this under its own terms and privacy
+policy. Your key is stored in the app's private storage; remove it in Settings
+→ Learning assistant. Zone maps are saved on your device only and are not
+synced to Google Drive.
+
 The current app does not include advertising, analytics, crash-reporting uploads,
 tracking identifiers, payments, or a BiblioChad account system. It makes network
 requests for the Google features you enable. Review Google Play services SDK

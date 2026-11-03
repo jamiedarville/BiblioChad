@@ -23,6 +23,7 @@
   import { flattenToc, HIGHLIGHT_COLORS, type TocItem } from '../lib/epub/foliate'
   import EpubView from './EpubView.svelte'
   import PdfView from './PdfView.svelte'
+  import ZonePanel from './ZonePanel.svelte'
   import Icon from './Icon.svelte'
 
   let {
@@ -37,7 +38,7 @@
   let label = $state('')
   let locator = $state<Locator | null>(null)
   let toc = $state<{ label: string; href: string; depth: number }[]>([])
-  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style'>(null)
+  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone'>(null)
   let prompt = $state<OpenBook['prompt']>(null)
   let selection = $state<{ cfi: string; text: string; percent: number } | null>(null)
   let editing = $state<Annotation | null>(null)
@@ -237,6 +238,14 @@
     }
   }
 
+  /** Where the reader is, for the learning assistant. */
+  function zoneContext() {
+    if (!locator || !book) return null
+    if (book.format === 'pdf') return { locator, label: '', passage: null }
+    const where = [label, formatPercent(percent)].filter(Boolean).join(' · ')
+    return { locator, label: where, passage: epubView?.passage() ?? '' }
+  }
+
   function seek(e: Event) {
     const f = Number((e.target as HTMLInputElement).value)
     if (book?.format === 'epub') epubView?.goToFraction(f)
@@ -282,6 +291,7 @@
       <button class="ghost icon" class:on={panel === 'toc'} title="Contents" aria-label="Table of contents" onclick={() => (panel = panel === 'toc' ? null : 'toc')}><Icon name="toc" /></button>
       <button class="ghost icon" class:on={panel === 'marks'} title="Bookmarks and notes" aria-label="Bookmarks and notes" onclick={() => (panel = panel === 'marks' ? null : 'marks')}><Icon name="bookmark" /></button>
       <button class="ghost icon" class:on={panel === 'search'} title="Search (Ctrl+F)" aria-label="Search in book" onclick={() => (panel = panel === 'search' ? null : 'search')}><Icon name="search" /></button>
+      <button class="ghost icon" class:on={panel === 'zone'} title="Learning zone" aria-label="Learning zone" onclick={() => (panel = panel === 'zone' ? null : 'zone')}><Icon name="zone" /></button>
       <button class="ghost icon" class:on={panel === 'style'} title="Display settings" aria-label="Display settings" onclick={() => (panel = panel === 'style' ? null : 'style')}><Icon name="type" /></button>
       <button class="ghost icon" title="Add bookmark (Ctrl+D)" aria-label="Add bookmark" onclick={addBookmark}><Icon name="bookmark-add" /></button>
       <button class="ghost icon" title={isAndroid ? 'Hide reading controls' : 'Fullscreen (F11)'} aria-label={isAndroid ? 'Toggle reading controls' : 'Toggle fullscreen'} onclick={fullscreen}><Icon name="fullscreen" /></button>
@@ -297,7 +307,7 @@
   {/if}
 
   <div class="body">
-    {#if panel && panel !== 'style'}
+    {#if panel && panel !== 'style' && panel !== 'zone'}
       <aside class="panel">
         {#if panel === 'toc'}
           <h3>Contents</h3>
@@ -395,6 +405,12 @@
         />
       {/if}
     </div>
+
+    {#if panel === 'zone' && book}
+      <aside class="panel right wide">
+        <ZonePanel bookId={bookId} {chad} context={zoneContext} onJump={(loc) => { goToLocator(loc); if (window.innerWidth < 900) panel = null }} />
+      </aside>
+    {/if}
 
     {#if panel === 'style'}
       <aside class="panel right">
@@ -555,6 +571,9 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+  .panel.wide {
+    width: 380px;
   }
   .panel h3 {
     font-size: 12px;
