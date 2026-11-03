@@ -200,6 +200,14 @@ current disclosures, and the precise fields requested by the form. Describe
 which features are optional, what is encrypted in transit, why each category is
 used, and how deletion works. Never copy another app's answers.
 
+The optional **learning assistant** also transmits data: when the user asks for
+a zone map, the text of the current page (or PDF pages), the background and goal
+they typed for that book, and their highlights on that page go directly to the
+AI provider they configured, authenticated with their own API key. Nothing is
+sent until they tap **Map my zone**. The key is kept in the app's private
+database. Declare this as user-initiated sharing of app content with a third
+party, and name it in the privacy policy.
+
 The current app does not create a BiblioChad account. If you later add account
 creation, revisit the requirement for an in-app deletion option and a public
 web deletion-request route. Disconnecting Google is not deleting a Google

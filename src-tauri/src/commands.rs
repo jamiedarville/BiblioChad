@@ -27,7 +27,7 @@ fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> CmdResult<T> + Send + 'static,
 ) -> CmdResult<T> {
     tauri::async_runtime::spawn_blocking(f)
@@ -379,7 +379,7 @@ pub fn delete_annotation(state: State<'_, AppState>, annotation_id: String) -> C
     Ok(state.lib.delete_annotation(&annotation_id)?)
 }
 
-fn opened_path(state: &AppState, id: i64) -> CmdResult<PathBuf> {
+pub(crate) fn opened_path(state: &AppState, id: i64) -> CmdResult<PathBuf> {
     let src = state.lib.book_source(id)?;
     if let Some(p) = src.local_path {
         return Ok(PathBuf::from(p));
@@ -607,6 +607,10 @@ pub async fn drive_disconnect(
             books::remove_cached_file(&state, std::path::Path::new(&path));
         }
         state.lib.wipe()?;
+        // The learning-assistant settings went with the database; drop the key too.
+        if let Err(e) = state.tutor_store.clear() {
+            tracing::warn!("could not remove the learning assistant key: {e}");
+        }
         #[cfg(target_os = "android")]
         {
             let _ = std::fs::remove_dir_all(state.paths.root.join("imports"));

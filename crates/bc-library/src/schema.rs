@@ -3,7 +3,8 @@ use rusqlite::Connection;
 use crate::Result;
 
 /// Ordered migrations. Each runs once; `PRAGMA user_version` tracks progress.
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
 CREATE TABLE accounts(
   id INTEGER PRIMARY KEY,
   email TEXT,
@@ -118,7 +119,32 @@ CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 -- Days (YYYY-MM-DD, local time) on which any reading happened; for streaks.
 CREATE TABLE reading_days(day TEXT PRIMARY KEY);
-"#];
+"#,
+    r#"
+-- Learning assistant: what the reader told us for each book, and how much
+-- stretch the next zone map should have (1 = most support .. 5 = most challenge).
+CREATE TABLE zone_profiles(
+  book_id INTEGER PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+  background TEXT NOT NULL DEFAULT '',
+  goal TEXT NOT NULL DEFAULT '',
+  stretch INTEGER NOT NULL DEFAULT 3,
+  updated_at INTEGER NOT NULL
+);
+
+-- Zone of Proximal Development maps, one per request.
+CREATE TABLE zone_maps(
+  id TEXT PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  locator_json TEXT NOT NULL,
+  label TEXT NOT NULL,
+  guide_json TEXT NOT NULL,
+  model TEXT NOT NULL,
+  feedback TEXT CHECK (feedback IN ('too_easy', 'just_right', 'too_hard')),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX zone_maps_book ON zone_maps(book_id, created_at);
+"#,
+];
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     let version: usize = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;

@@ -42,6 +42,31 @@ export function searchEmpty(chad: boolean): string {
   return chad ? 'Nothing. Not even Chad could find it.' : 'No matches.'
 }
 
+export function zoneLoading(chad: boolean): string {
+  if (!chad) return 'Mapping your zone…'
+  return pick([
+    'Finding the edge of your comfort zone…',
+    'Loading the right amount of weight on the bar…',
+    'Spotting you. Not lifting it for you.',
+    'Measuring your reach, then adding a little…',
+  ])
+}
+
+export function zoneFeedbackLine(chad: boolean, feedback: 'too_easy' | 'just_right' | 'too_hard'): string {
+  if (!chad) {
+    return {
+      too_easy: 'Got it. The next map will stretch you more.',
+      just_right: 'Great. The next map will keep this level.',
+      too_hard: 'Got it. The next map will give you more support.',
+    }[feedback]
+  }
+  return {
+    too_easy: 'Too light? Adding plates.',
+    just_right: 'Perfect form. Same weight next set.',
+    too_hard: 'No shame. Dropping the weight, keeping the reps.',
+  }[feedback]
+}
+
 export function rankProgress(rank: Rank, finished: number): number {
   if (rank.next_threshold == null) return 1
   const span = rank.next_threshold - rank.threshold

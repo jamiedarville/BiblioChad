@@ -193,6 +193,15 @@ try:
     check(hits >= 1, f"search found hits ({hits})")
     shot("06-pdf-search")
 
+    print("learning zone panel asks for a key before mapping")
+    js("document.querySelector('button[aria-label=\"Learning zone\"]').click()")
+    wait(lambda: js("return !!document.querySelector('.zone-panel')"), what="learning zone panel")
+    notice = wait(lambda: js("return document.querySelector('.zone-panel .notice')?.textContent"), what="key notice")
+    check("API key" in notice, f"zone panel explains setup ({notice!r})")
+    map_disabled = js("return document.querySelector('.zone-panel .map-btn').disabled")
+    check(map_disabled, "map button is disabled without a key")
+    shot("06b-learning-zone")
+
     print("settings page renders")
     js("document.querySelector('button[aria-label=\"Back to library\"]').click()")
     wait(lambda: js("return !!document.querySelector('button[aria-label=\"Settings\"]')"), what="library")
@@ -200,6 +209,8 @@ try:
     wait(lambda: js("return document.querySelector('h1')?.textContent === 'Settings'"), what="settings")
     time.sleep(0.5)
     shot("07-settings")
+    check(js("return [...document.querySelectorAll('h2')].some(h => h.textContent === 'Learning assistant')"),
+          "settings shows the learning assistant card")
 finally:
     try:
         call("DELETE", S)

@@ -38,6 +38,8 @@ pub struct AppState {
     pub pdf: Result<PdfEngine, String>,
     pub http: reqwest::Client,
     pub store: Arc<dyn TokenStore>,
+    /// The learning assistant's API key.
+    pub tutor_store: Arc<dyn TokenStore>,
     pub drive: RwLock<Option<DriveClient>>,
     pub epubs: Mutex<LruCache<i64, Arc<Mutex<EpubArchive>>>>,
     /// Book currently open in the reader, so eviction never removes it.
@@ -63,6 +65,7 @@ impl AppState {
         let store: Arc<dyn TokenStore> = Arc::new(KeyringStore::default());
         #[cfg(target_os = "android")]
         let store: Arc<dyn TokenStore> = Arc::new(MemoryStore::default());
+        let tutor_store = crate::tutor::key_store(&lib);
         let state = Self {
             paths,
             lib,
@@ -70,6 +73,7 @@ impl AppState {
             pdf,
             http,
             store,
+            tutor_store,
             drive: RwLock::new(None),
             epubs: Mutex::new(LruCache::new(NonZeroUsize::new(3).unwrap())),
             open_book_key: Mutex::new(None),

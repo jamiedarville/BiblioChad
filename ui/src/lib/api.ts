@@ -195,6 +195,63 @@ export interface AppInfo {
   pdf_error: string | null
 }
 
+export type TutorProvider = 'anthropic' | 'openai_compatible'
+
+export interface TutorConfig {
+  provider: TutorProvider
+  model: string
+  base_url: string
+}
+
+export interface TutorStatus extends TutorConfig {
+  ready: boolean
+  has_key: boolean
+  key_hint: string | null
+  default_model: string
+}
+
+export type ZoneFeedback = 'too_easy' | 'just_right' | 'too_hard'
+
+export interface ZoneProfile {
+  book_id: number
+  background: string
+  goal: string
+  /** 1 = most support .. 5 = most challenge */
+  stretch: number
+}
+
+export interface ZoneGuide {
+  summary: string
+  can_do_alone: { idea: string; because: string }[]
+  zone: {
+    concept: string
+    why_it_matters: string
+    hints: string[]
+    explanation: string
+    try_it: string
+    answer: string
+  }[]
+  not_yet: { idea: string; come_back_when: string }[]
+  check: { question: string; answer: string }[]
+  next_step: string
+}
+
+export interface ZoneMap {
+  id: string
+  book_id: number
+  locator: Locator
+  label: string
+  guide: ZoneGuide
+  model: string
+  feedback: ZoneFeedback | null
+  created_at: number
+}
+
+export interface ZoneOverview {
+  profile: ZoneProfile
+  maps: ZoneMap[]
+}
+
 export interface CmdError {
   kind: string
   message: string
@@ -266,4 +323,17 @@ export const api = {
   clearCache: () => invoke<void>('clear_cache'),
   appInfo: () => invoke<AppInfo>('app_info'),
   takePendingOpen: () => invoke<number | null>('take_pending_open'),
+
+  tutorStatus: () => invoke<TutorStatus>('tutor_status'),
+  /** `apiKey: null` keeps the saved key; an empty string removes it. */
+  tutorSave: (config: TutorConfig, apiKey: string | null) => invoke<TutorStatus>('tutor_save', { config, apiKey }),
+  tutorForget: () => invoke<TutorStatus>('tutor_forget'),
+  tutorTest: () => invoke<string>('tutor_test'),
+  zoneOverview: (id: number) => invoke<ZoneOverview>('zone_overview', { id }),
+  zoneSetProfile: (id: number, background: string, goal: string) =>
+    invoke<ZoneProfile>('zone_set_profile', { id, background, goal }),
+  zoneGenerate: (id: number, locator: Locator, label: string, passage: string | null) =>
+    invoke<ZoneMap>('zone_generate', { id, locator, label, passage }),
+  zoneFeedback: (mapId: string, feedback: ZoneFeedback) => invoke<ZoneProfile>('zone_feedback', { mapId, feedback }),
+  zoneDelete: (mapId: string) => invoke<void>('zone_delete', { mapId }),
 }

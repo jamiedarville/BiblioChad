@@ -13,6 +13,8 @@
     type DriveStatus,
     type FolderEntry,
     type Stats,
+    type TutorConfig,
+    type TutorStatus,
   } from '../lib/api'
   import { prefs } from '../lib/prefs.svelte'
   import { toasts } from '../lib/toast.svelte'
@@ -32,6 +34,57 @@
   let stack = $state<FolderEntry[]>([])
   let folders = $state<FolderEntry[]>([])
   let loadingFolders = $state(false)
+
+  let tutor = $state<TutorStatus | null>(null)
+  let tutorForm = $state<TutorConfig>({ provider: 'anthropic', model: '', base_url: '' })
+  let tutorKey = $state('')
+  let tutorBusy = $state(false)
+
+  async function loadTutor() {
+    try {
+      tutor = await api.tutorStatus()
+      tutorForm = { provider: tutor.provider, model: tutor.model, base_url: tutor.base_url }
+    } catch (e) {
+      toasts.push('error', errorMessage(e))
+    }
+  }
+  onMount(loadTutor)
+
+  async function saveTutor() {
+    tutorBusy = true
+    try {
+      tutor = await api.tutorSave($state.snapshot(tutorForm), tutorKey.trim() ? tutorKey.trim() : null)
+      tutorKey = ''
+      toasts.push('success', prefs.value.chadMode ? 'Key saved. Chad is ready to coach.' : 'Learning assistant saved.')
+    } catch (e) {
+      toasts.push('error', errorMessage(e))
+    } finally {
+      tutorBusy = false
+    }
+  }
+
+  async function testTutor() {
+    tutorBusy = true
+    try {
+      const model = await api.tutorTest()
+      toasts.push('success', `Connected. ${model} is answering.`)
+    } catch (e) {
+      toasts.push('error', errorMessage(e))
+    } finally {
+      tutorBusy = false
+    }
+  }
+
+  async function forgetTutor() {
+    if (!(await confirmAction('Remove the learning assistant API key and settings? Your saved zone maps are kept.'))) return
+    try {
+      tutor = await api.tutorForget()
+      tutorForm = { provider: tutor.provider, model: tutor.model, base_url: tutor.base_url }
+      toasts.push('info', 'Key removed.')
+    } catch (e) {
+      toasts.push('error', errorMessage(e))
+    }
+  }
 
   async function refresh() {
     try {
@@ -186,10 +239,51 @@
       {/if}
     </section>
 
+    <section class="card">
+      <h2>Learning assistant</h2>
+      <p>
+        Open the <strong>Learning zone</strong> panel while reading to map your <em>Zone of Proximal Development</em> for the
+        page: what you already know, what you can reach with a few hints, and what can wait. Rate each map and the next one
+        adjusts. Bring your own API key.
+      </p>
+      {#if tutor}
+        <div class="form">
+          <label>Provider
+            <select bind:value={tutorForm.provider}>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai_compatible">OpenAI-compatible (OpenAI, OpenRouter, Ollama, LM Studio…)</option>
+            </select>
+          </label>
+          <label>API key
+            <input type="password" autocomplete="off" spellcheck="false" bind:value={tutorKey}
+              placeholder={tutor.has_key ? `Saved (ends in ${tutor.key_hint}). Paste to replace.` : tutorForm.provider === 'anthropic' ? 'sk-ant-…' : 'Paste your key (leave empty for a local server)'} />
+          </label>
+          <label>Model
+            <input type="text" spellcheck="false" bind:value={tutorForm.model}
+              placeholder={tutorForm.provider === 'anthropic' ? `Default: ${tutor.default_model}` : 'Model name, e.g. the one your server lists'} />
+          </label>
+          <label>Endpoint <span class="muted small">(optional)</span>
+            <input type="url" spellcheck="false" bind:value={tutorForm.base_url}
+              placeholder={tutorForm.provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'} />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button class="primary" disabled={tutorBusy} onclick={saveTutor}>Save</button>
+          <button disabled={tutorBusy || !tutor.ready} onclick={testTutor}>Test connection</button>
+          {#if tutor.has_key || tutor.model || tutor.base_url}<button class="ghost" onclick={forgetTutor}>Remove key</button>{/if}
+        </div>
+        <p class="muted small">
+          When you map a page, its text, what you told the assistant about yourself for that book, and your highlights on the page are sent to the provider above
+          using your key, and the provider's charges apply. Nothing is sent until you ask for a map.
+          {isAndroid ? 'The key is stored in BiblioChad\'s private app storage on this device.' : 'The key is stored in your system keychain, not in a file.'}
+        </p>
+      {/if}
+    </section>
+
     {#if isAndroid}
       <section class="card">
         <h2>Privacy</h2>
-        <p>Imported books, reading positions, highlights and collections are stored privately on this device. There are no ads or analytics in BiblioChad. Optional Drive sync sends reading data directly to your Google Drive app-data folder.</p>
+        <p>Imported books, reading positions, highlights and collections are stored privately on this device. There are no ads or analytics in BiblioChad. Optional Drive sync sends reading data directly to your Google Drive app-data folder. The optional learning assistant sends the page you ask it to map directly to the AI provider you configure.</p>
         <p>Disconnect Drive above to stop sync. To remove all local copies and reading data, use Android Settings → Apps → BiblioChad → Storage → Clear storage. This does not delete your original books or the sync file in Google Drive.</p>
         {#if privacyUrl?.startsWith('https://')}
           <button onclick={() => openUrl(privacyUrl!).catch((e) => toasts.push('error', errorMessage(e)))}>Privacy policy</button>
@@ -349,6 +443,18 @@
   }
   .small {
     font-size: 12px;
+  }
+  .form {
+    display: grid;
+    gap: 2px;
+    margin-bottom: 12px;
+  }
+  .form label {
+    margin: 6px 0 0;
+  }
+  .form input,
+  .form select {
+    width: 100%;
   }
   .ach {
     list-style: none;

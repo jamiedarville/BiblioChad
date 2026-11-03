@@ -8,6 +8,7 @@ mod error;
 mod mobile;
 mod protocol;
 mod state;
+mod tutor;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -214,6 +215,15 @@ pub fn run() {
             commands::background_app,
             commands::refresh_android_viewport,
             commands::import_sample_book,
+            tutor::tutor_status,
+            tutor::tutor_save,
+            tutor::tutor_forget,
+            tutor::tutor_test,
+            tutor::zone_overview,
+            tutor::zone_set_profile,
+            tutor::zone_generate,
+            tutor::zone_feedback,
+            tutor::zone_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BiblioChad");

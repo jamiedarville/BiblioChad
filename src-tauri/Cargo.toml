@@ -19,6 +19,7 @@ bc-drive = { path = "../crates/bc-drive" }
 bc-library = { path = "../crates/bc-library" }
 bc-reader = { path = "../crates/bc-reader" }
 bc-sync = { path = "../crates/bc-sync" }
+bc-tutor = { path = "../crates/bc-tutor" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
