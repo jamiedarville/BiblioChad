@@ -189,6 +189,29 @@ async fn openai_compatible_shape_and_parse() {
 }
 
 #[tokio::test]
+async fn openai_ping_sends_no_token_cap() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |r: &Request| {
+            let body: Value = serde_json::from_slice(&r.body).unwrap();
+            // Newer OpenAI models return 400 for `max_tokens`.
+            assert!(body.get("max_tokens").is_none());
+            ResponseTemplate::new(200).set_body_json(json!({
+                "model": "gpt",
+                "choices": [{ "finish_reason": "stop", "message": { "content": "OK" } }]
+            }))
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    tutor(&server, Provider::OpenaiCompatible, "gpt")
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn ping_reports_missing_model() {
     let server = MockServer::start().await;
     Mock::given(path("/v1/messages"))
