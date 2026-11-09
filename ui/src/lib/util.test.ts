@@ -7,8 +7,8 @@ describe('protoUrl', () => {
     expect(protoUrl('/cover/1', true)).toBe('http://bibliochad.localhost/cover/1')
     expect(protoUrl('cover/1', false)).toBe('bibliochad://localhost/cover/1')
   })
-  it('uses HTTP custom-protocol URLs on Android WebView', () => {
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Linux; Android 16)' })
+  it('detects Windows from the user agent when no flag is given', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' })
     try { expect(protoUrl('epub/7/manifest')).toBe('http://bibliochad.localhost/epub/7/manifest') }
     finally { vi.unstubAllGlobals() }
   })

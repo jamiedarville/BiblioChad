@@ -307,7 +307,7 @@ impl Auth {
         }
     }
 
-    /// Use a platform authorization service (Google Identity Services on Android).
+    /// Use an external authorization service that supplies access tokens.
     /// Tokens are cached for at most 45 minutes and retried after a 401.
     pub fn with_provider(
         token: String,

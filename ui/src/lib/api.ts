@@ -252,6 +252,62 @@ export interface ZoneOverview {
   maps: ZoneMap[]
 }
 
+export interface LabDiagram {
+  title: string
+  kind: string
+  mermaid: string
+  explanation: string
+}
+
+export interface LabStep {
+  title: string
+  instructions: string
+  why: string
+  expected: string
+  tip: string
+}
+
+export interface Lab {
+  title: string
+  objective: string
+  difficulty: string
+  estimated_minutes: number
+  source_refs: string[]
+  concepts: string[]
+  setup_requirements: string[]
+  setup_steps: string[]
+  steps: LabStep[]
+  diagram: LabDiagram
+  checks: { question: string; answer: string }[]
+  troubleshooting: string[]
+  extension: string
+}
+
+export interface LabGuide {
+  overview: string
+  audience: string
+  prerequisites: string[]
+  tools_overview: string
+  labs: Lab[]
+  capstone: string
+  safety_notes: string[]
+}
+
+export interface LabGuideRecord {
+  id: string
+  book_id: number
+  guide: LabGuide
+  model: string
+  fingerprint: string
+  created_at: number
+  updated_at: number
+}
+
+export interface LabOverview {
+  lab: LabGuideRecord | null
+  stale: boolean
+}
+
 export interface CmdError {
   kind: string
   message: string
@@ -268,8 +324,6 @@ export function errorKind(e: unknown): string | null {
 }
 
 export const api = {
-  backgroundApp: () => invoke<void>('background_app'),
-  refreshAndroidViewport: () => invoke<void>('refresh_android_viewport'),
   importSampleBook: () => invoke<number>('import_sample_book'),
   overview: () => invoke<Overview>('get_overview'),
   listFolder: (folderId: string | null) => invoke<FolderListing>('list_folder', { folderId }),
@@ -336,4 +390,9 @@ export const api = {
     invoke<ZoneMap>('zone_generate', { id, locator, label, passage }),
   zoneFeedback: (mapId: string, feedback: ZoneFeedback) => invoke<ZoneProfile>('zone_feedback', { mapId, feedback }),
   zoneDelete: (mapId: string) => invoke<void>('zone_delete', { mapId }),
+  labOverview: (id: number) => invoke<LabOverview>('lab_overview', { id }),
+  labGenerate: (id: number, labCount: number | null, focus: string | null) =>
+    invoke<LabGuideRecord>('lab_generate', { id, labCount, focus }),
+  labDelete: (id: number) => invoke<void>('lab_delete', { id }),
+  labExport: (id: number, dest: string) => invoke<void>('lab_export', { id, dest }),
 }

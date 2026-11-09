@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { isAndroid } from '../lib/platform'
   import { askText } from '../lib/dialogs'
   import { onMount } from 'svelte'
   import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -24,6 +23,7 @@
   import EpubView from './EpubView.svelte'
   import PdfView from './PdfView.svelte'
   import ZonePanel from './ZonePanel.svelte'
+  import LabPanel from './LabPanel.svelte'
   import Icon from './Icon.svelte'
 
   let {
@@ -38,7 +38,7 @@
   let label = $state('')
   let locator = $state<Locator | null>(null)
   let toc = $state<{ label: string; href: string; depth: number }[]>([])
-  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone'>(null)
+  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone' | 'lab'>(null)
   let prompt = $state<OpenBook['prompt']>(null)
   let selection = $state<{ cfi: string; text: string; percent: number } | null>(null)
   let editing = $state<Annotation | null>(null)
@@ -145,7 +145,6 @@
   }
 
   async function fullscreen() {
-    if (isAndroid) { chromeVisible = !chromeVisible; return }
     const w = getCurrentWindow()
     await w.setFullscreen(!(await w.isFullscreen()))
   }
@@ -292,9 +291,10 @@
       <button class="ghost icon" class:on={panel === 'marks'} title="Bookmarks and notes" aria-label="Bookmarks and notes" onclick={() => (panel = panel === 'marks' ? null : 'marks')}><Icon name="bookmark" /></button>
       <button class="ghost icon" class:on={panel === 'search'} title="Search (Ctrl+F)" aria-label="Search in book" onclick={() => (panel = panel === 'search' ? null : 'search')}><Icon name="search" /></button>
       <button class="ghost icon" class:on={panel === 'zone'} title="Learning zone" aria-label="Learning zone" onclick={() => (panel = panel === 'zone' ? null : 'zone')}><Icon name="zone" /></button>
+      <button class="ghost icon" class:on={panel === 'lab'} title="Build a lab" aria-label="Build a lab" onclick={() => (panel = panel === 'lab' ? null : 'lab')}><Icon name="lab" /></button>
       <button class="ghost icon" class:on={panel === 'style'} title="Display settings" aria-label="Display settings" onclick={() => (panel = panel === 'style' ? null : 'style')}><Icon name="type" /></button>
       <button class="ghost icon" title="Add bookmark (Ctrl+D)" aria-label="Add bookmark" onclick={addBookmark}><Icon name="bookmark-add" /></button>
-      <button class="ghost icon" title={isAndroid ? 'Hide reading controls' : 'Fullscreen (F11)'} aria-label={isAndroid ? 'Toggle reading controls' : 'Toggle fullscreen'} onclick={fullscreen}><Icon name="fullscreen" /></button>
+      <button class="ghost icon" title="Fullscreen (F11)" aria-label="Toggle fullscreen" onclick={fullscreen}><Icon name="fullscreen" /></button>
     </div>
   </header>
 
@@ -307,7 +307,7 @@
   {/if}
 
   <div class="body">
-    {#if panel && panel !== 'style' && panel !== 'zone'}
+    {#if panel && panel !== 'style' && panel !== 'zone' && panel !== 'lab'}
       <aside class="panel">
         {#if panel === 'toc'}
           <h3>Contents</h3>
@@ -409,6 +409,12 @@
     {#if panel === 'zone' && book}
       <aside class="panel right wide">
         <ZonePanel bookId={bookId} {chad} context={zoneContext} onJump={(loc) => { goToLocator(loc); if (window.innerWidth < 900) panel = null }} />
+      </aside>
+    {/if}
+
+    {#if panel === 'lab' && book}
+      <aside class="panel right wide">
+        <LabPanel {bookId} bookTitle={book.title} />
       </aside>
     {/if}
 

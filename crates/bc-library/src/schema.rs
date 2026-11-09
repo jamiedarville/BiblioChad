@@ -144,6 +144,19 @@ CREATE TABLE zone_maps(
 );
 CREATE INDEX zone_maps_book ON zone_maps(book_id, created_at);
 "#,
+    r#"
+-- "Build a lab": one whole-book lab guide per book. Local only, like
+-- zone maps. Rebuilding a guide replaces the row.
+CREATE TABLE lab_guides(
+  id TEXT PRIMARY KEY,
+  book_id INTEGER NOT NULL UNIQUE REFERENCES books(id) ON DELETE CASCADE,
+  guide_json TEXT NOT NULL,
+  model TEXT NOT NULL,
+  fingerprint TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+"#,
 ];
 
 pub fn migrate(conn: &Connection) -> Result<()> {

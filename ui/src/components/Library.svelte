@@ -15,7 +15,6 @@
   import { prefs } from '../lib/prefs.svelte'
   import { toasts } from '../lib/toast.svelte'
   import { emptyLibrary, greeting, rankProgress } from '../lib/chad'
-  import { isAndroid } from '../lib/platform'
   import { askText, confirmAction } from '../lib/dialogs'
   import BookGrid from './BookGrid.svelte'
   import BookDetails from './BookDetails.svelte'
@@ -288,7 +287,7 @@
               <button class="primary" onclick={onSettings}>Connect Google Drive</button>
             {/if}
             <button onclick={importFiles}>Import files</button>
-            {#if isAndroid}<button onclick={sampleBook}>Try a sample book</button>{/if}
+            <button onclick={sampleBook}>Try a sample book</button>
           </div>
         </div>
       {:else if filtering}

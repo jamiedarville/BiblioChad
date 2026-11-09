@@ -2,7 +2,7 @@
 
 # BiblioChad
 
-> An ebook reader for Windows (ARM64 and x64), Linux (x64), and Android (ARM64), written in Rust, whose library *is* your Google Drive folder tree.
+> An ebook reader for Windows ARM64 and Arch Linux x64, written in Rust, whose library *is* your Google Drive folder tree.
 > Reads PDF and EPUB, remembers where you stopped, and has the personality of a man who finishes every book he starts.
 
 **Finish the book.**
@@ -13,10 +13,9 @@ The design document is [`docs/project.md`](docs/project.md). This README covers 
 
 | Your PC | Installer (recommended) | Other options |
 |---|---|---|
-| **Intel / AMD** (most Windows PCs) | [**Download for Windows x64**](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-x64.msi) · [Portable zip](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Portable-x64.zip) |
 | **ARM** (Snapdragon, Surface Pro X, Copilot+ PCs) | [**Download for Windows ARM64**](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-arm64.msi) · [Portable zip](https://github.com/jamiedarville/BiblioChad/releases/latest/download/BiblioChad-Portable-arm64.zip) |
 
-These links always fetch the newest [release](https://github.com/jamiedarville/BiblioChad/releases/latest). Not sure which you have? **Settings → System → About → System type** says *x64-based processor* or *ARM-based processor*.
+These links always fetch the newest [release](https://github.com/jamiedarville/BiblioChad/releases/latest). BiblioChad is only built for **Windows ARM64** and **Arch Linux x64**; there is no Windows x64 or Android build.
 
 - **Installer** (`.exe`): installs for your user, adds a Start menu entry, and shows up in *Installed apps*.
 - **MSI**: the same app as an MSI package, for managed or all-users installs.
@@ -36,7 +35,13 @@ Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
 
 The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
 
-**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.2 && git push origin v0.1.2`) or open **Actions → Release → Run workflow**. Both build Windows x64 and ARM64 plus the Arch Linux package, and publish them as a GitHub Release.
+**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.3 && git push origin v0.1.3`) or open **Actions → Release → Run workflow**. Both build the Windows ARM64 installers plus the Arch Linux package, and publish them as a GitHub Release.
+
+## New in v0.1.3
+
+- **Build a lab**: the Learning-zone LLM key can now analyse the whole book and build a series of practical labs — setup instructions, step-by-step work, a diagram per lab, self-checks and troubleshooting. Labs are saved with the book, load again on every open, and export as Markdown.
+- **Learning zone** (from the unreleased work after v0.1.2): per-page Zone of Proximal Development maps with graduated hints, self-checks and difficulty feedback, using your own Anthropic or OpenAI-compatible API key.
+- **Platforms narrowed**: BiblioChad is now built only for **Windows ARM64** and **Arch Linux x64**. The Android app and the Windows x64 build have been removed.
 
 ## New in v0.1.2
 
@@ -51,36 +56,6 @@ The Google Drive sign-in is kept in your desktop keyring through the Secret Serv
 - Releases now include an **Arch Linux x86_64 package**, alongside Windows x64 and ARM64 installers and portable builds.
 
 Collections are separate from Drive folders, and a book can belong to several. Manage them from the **Collections** tab; use the collection checkboxes in **Book details** to remove a book from a collection.
-
-## Android
-
-BiblioChad also builds as an Android app (Android 8 / API 26 and newer), using the
-same library, EPUB reader, PDFium PDF reader, collections, and optional Drive sync.
-The phone UI includes touch-accessible book actions, Back navigation, private
-file imports through Android's document picker, and a sample book without login.
-Android Drive sign-in uses Google Identity Services, not the desktop OAuth JSON.
-
-With JDK 17, Android SDK Platform 36 / Build-Tools 36.0.0, NDK 28.2.13676358,
-Node.js and Rust installed, set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME`, then:
-
-```bash
-rustup target add aarch64-linux-android
-npm ci && npm --prefix ui ci
-npm run android:init
-npm run android:apk
-```
-
-The debug APK is under
-`src-tauri/gen/android/app/build/outputs/apk/universal/debug/`. The **Build Android**
-GitHub Actions workflow also produces a debug APK. Keep custom native edits in
-`mobile/android` and the setup scripts: `src-tauri/gen/android` is regenerated.
-PDFium downloads are pinned, checksum-verified, and checked for 16 KB alignment.
-
-For signed Play bundles, OAuth certificate registration, privacy disclosures,
-testing and submission, follow **[playstore.md](playstore.md)**. It includes the
-steps you must complete in your own Google accounts; generating an APK does not
-publish it or obtain Google approval. An editable privacy-policy draft is in
-[`mobile/privacy-policy-template.md`](mobile/privacy-policy-template.md).
 
 ## Learning zone (bring your own LLM key)
 
@@ -99,10 +74,26 @@ Earlier maps feed into later ones, and your highlights on the page are included 
 
 Set it up in **Settings → Learning assistant**. Anthropic (default model `claude-opus-5-5`) and any
 OpenAI-compatible endpoint (OpenAI, OpenRouter, or a local Ollama / LM Studio server) are supported. The key is
-stored in the system keychain (Android: private app storage). Nothing is sent until you press **Map my zone**;
+stored in the system keychain. Nothing is sent until you press **Map my zone**;
 then the page text, your background and goal, and highlights on that page go straight to your provider, and its
 charges apply. Maps are saved locally and are not synced to Drive. The code is in `crates/bc-tutor` and
 `ui/src/components/ZonePanel.svelte`.
+
+### Build a lab
+
+Open the **Build a lab** panel (the flask button in the reader's toolbar) and the same LLM analyses the
+whole book — short books in full, long books sampled evenly from the beginning, middle and end, plus the
+contents/outline — and designs a series of hands-on labs: what to set up, ordered step-by-step instructions
+with the reason for each step and what you should see, a diagram for every lab (drawn in the panel, kept as
+Mermaid in exports), self-checks, troubleshooting and a harder follow-up. Pick 3–7 labs and an optional focus;
+your Learning-zone background and goal pitch the level. Generating can take a minute or two and your provider's
+charges apply; scanned PDFs with no selectable text can't be labbed.
+
+The guide is saved locally with the book (one per book; rebuilding replaces it), so it loads again every time
+the book opens. Tick steps off as you work (ticks stay on this device), export the whole guide as Markdown
+from the panel or from **Book details**, and rebuild from there or the panel if the book file changes. Like
+zone maps, labs are not synced to Drive. The code is in `crates/bc-tutor` (`lab.rs`, `lab_prompt.rs`),
+`crates/bc-library/src/labs.rs` and `ui/src/components/LabPanel.svelte`.
 
 ## What works today
 
@@ -118,7 +109,8 @@ charges apply. Maps are saved locally and are not synced to Drive. The code is i
 | Local metadata edits, Markdown export of highlights, local file import, "Open with BiblioChad" for .epub/.pdf | ✅ |
 | Chad Mode (jokes, ranks, streaks, achievements) with an off switch | ✅ |
 | **Learning zone**: per-page Zone of Proximal Development maps with graduated hints, self-checks and difficulty feedback, using your own Anthropic or OpenAI-compatible API key | ✅ |
-| **Windows installers** (NSIS + MSI + portable zip) for **ARM64** (`windows-11-arm` runner) and **x64** (`windows-latest`) | ✅ in CI |
+| **Build a lab**: whole-book lab series (setup, step-by-step instructions, per-lab diagrams, checks) generated by the same LLM key, saved with the book and exportable as Markdown | ✅ |
+| **Windows ARM64 installers** (NSIS + MSI + portable zip, `windows-11-arm` runner) and **Arch Linux x64 package** | ✅ in CI |
 | **Arch Linux package** (`packaging/arch/PKGBUILD`, x86_64) | ✅ in CI |
 | PDF highlights, footnote pop-ups, TTS, reading stats beyond streaks | ❌ not yet (P1/P2) |
 
@@ -140,18 +132,18 @@ scripts/        fetch-pdfium.{sh,ps1}, make-test-corpus.py, e2e/smoke.py
 
 All logic lives in Rust; the UI is a thin view. Book content reaches the webview only through the `bibliochad://` protocol, which validates archive paths, strips `<script>`/`on*` handlers/`javascript:` URLs, and sends a strict CSP.
 
-## Building on Windows (ARM64 or x64)
+## Building on Windows ARM64
 
 1. Install **Rust** with `rustup` (host `aarch64-pc-windows-msvc`; check with `rustc -vV`).
-2. Install **Visual Studio 2022 Build Tools** with the MSVC build tools for your CPU (*ARM64* or *x64/x86*) and a Windows 11 SDK.
-3. Install **Node.js 22** (the build matching your CPU).
-4. Get PDFium: `.\scripts\fetch-pdfium.ps1 -Platform win-arm64` (or `-Platform win-x64` on an Intel/AMD PC).
+2. Install **Visual Studio 2022 Build Tools** with the **MSVC ARM64 build tools** and a Windows 11 SDK.
+3. Install **Node.js 22** (the ARM64 build).
+4. Get PDFium: `.\scripts\fetch-pdfium.ps1 -Platform win-arm64`.
 5. Install JS deps: `npm ci; npm --prefix ui ci`.
 6. Run in dev mode: `npx tauri dev`. Build the installer with `npx tauri build`. Output goes to `target\release\bundle\nsis\` and `...\msi\`.
 
 The installer bundles `pdfium.dll` and embeds the WebView2 bootstrapper, so it also works on a clean machine.
 
-Every push also builds both Windows versions in CI. Download `bibliochad-windows-arm64` (Snapdragon and other ARM PCs) or `bibliochad-windows-x64` (Intel/AMD PCs) from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
+Every push also builds the Windows ARM64 version in CI. Download `bibliochad-windows-arm64` from the run's **Artifacts**. Builds are unsigned, so SmartScreen will warn on first run.
 
 ## Building on Arch Linux
 

@@ -23,10 +23,6 @@ jobs:
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             pdfium: win-arm64
-          - arch: x64
-            runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            pdfium: win-x64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
