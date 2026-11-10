@@ -262,6 +262,8 @@ export interface LabDiagram {
 export interface LabStep {
   title: string
   instructions: string
+  /** Exact commands/code for the step ('' when not command-based). Added after v0.1.3; may be absent on old guides. */
+  code?: string
   why: string
   expected: string
   tip: string
@@ -276,7 +278,13 @@ export interface Lab {
   concepts: string[]
   setup_requirements: string[]
   setup_steps: string[]
+  /** Added after v0.1.3; may be absent/empty on guides built earlier. */
+  outcomes?: string[]
+  theory?: string
+  deliverable?: string
   steps: LabStep[]
+  /** New guides carry 2 diagrams here; v0.1.3 guides carry one in `diagram`. */
+  diagrams?: LabDiagram[]
   diagram: LabDiagram
   checks: { question: string; answer: string }[]
   troubleshooting: string[]
@@ -291,6 +299,13 @@ export interface LabGuide {
   labs: Lab[]
   capstone: string
   safety_notes: string[]
+}
+
+/** All diagrams for a lab, falling back to the legacy single diagram. */
+export function labDiagrams(lab: Lab): LabDiagram[] {
+  if (lab.diagrams && lab.diagrams.length) return lab.diagrams
+  if (lab.diagram && (lab.diagram.mermaid || lab.diagram.explanation)) return [lab.diagram]
+  return []
 }
 
 export interface LabGuideRecord {

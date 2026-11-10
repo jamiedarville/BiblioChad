@@ -38,7 +38,10 @@
   let label = $state('')
   let locator = $state<Locator | null>(null)
   let toc = $state<{ label: string; href: string; depth: number }[]>([])
-  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone' | 'lab'>(null)
+  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone'>(null)
+  /** Book alone, lab as a full page, or both side by side. The book stays
+   * mounted (hidden) in lab view so the reading position is untouched. */
+  let viewMode = $state<'book' | 'lab' | 'split'>('book')
   let prompt = $state<OpenBook['prompt']>(null)
   let selection = $state<{ cfi: string; text: string; percent: number } | null>(null)
   let editing = $state<Annotation | null>(null)
@@ -118,6 +121,10 @@
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement | null
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
+    if (viewMode === 'lab') {
+      if (e.key === 'Escape') viewMode = 'book'
+      return
+    }
     const k = e.key
     if (k === 'ArrowRight' || k === 'PageDown' || (k === ' ' && !e.shiftKey && book?.format === 'epub')) {
       e.preventDefault()
@@ -286,12 +293,16 @@
       <strong>{book?.title ?? ''}</strong>
       {#if book?.author}<span class="muted"> · {book.author}</span>{/if}
     </div>
+    <div class="seg view-seg" role="tablist" aria-label="View">
+      <button role="tab" aria-selected={viewMode === 'book'} class:primary={viewMode === 'book'} onclick={() => (viewMode = 'book')}>Book</button>
+      <button role="tab" aria-selected={viewMode === 'lab'} class:primary={viewMode === 'lab'} onclick={() => (viewMode = 'lab')}>Lab</button>
+      <button role="tab" aria-selected={viewMode === 'split'} class:primary={viewMode === 'split'} onclick={() => (viewMode = 'split')}>Split</button>
+    </div>
     <div class="row">
       <button class="ghost icon" class:on={panel === 'toc'} title="Contents" aria-label="Table of contents" onclick={() => (panel = panel === 'toc' ? null : 'toc')}><Icon name="toc" /></button>
       <button class="ghost icon" class:on={panel === 'marks'} title="Bookmarks and notes" aria-label="Bookmarks and notes" onclick={() => (panel = panel === 'marks' ? null : 'marks')}><Icon name="bookmark" /></button>
       <button class="ghost icon" class:on={panel === 'search'} title="Search (Ctrl+F)" aria-label="Search in book" onclick={() => (panel = panel === 'search' ? null : 'search')}><Icon name="search" /></button>
       <button class="ghost icon" class:on={panel === 'zone'} title="Learning zone" aria-label="Learning zone" onclick={() => (panel = panel === 'zone' ? null : 'zone')}><Icon name="zone" /></button>
-      <button class="ghost icon" class:on={panel === 'lab'} title="Build a lab" aria-label="Build a lab" onclick={() => (panel = panel === 'lab' ? null : 'lab')}><Icon name="lab" /></button>
       <button class="ghost icon" class:on={panel === 'style'} title="Display settings" aria-label="Display settings" onclick={() => (panel = panel === 'style' ? null : 'style')}><Icon name="type" /></button>
       <button class="ghost icon" title="Add bookmark (Ctrl+D)" aria-label="Add bookmark" onclick={addBookmark}><Icon name="bookmark-add" /></button>
       <button class="ghost icon" title="Fullscreen (F11)" aria-label="Toggle fullscreen" onclick={fullscreen}><Icon name="fullscreen" /></button>
@@ -306,8 +317,8 @@
     </div>
   {/if}
 
-  <div class="body">
-    {#if panel && panel !== 'style' && panel !== 'zone' && panel !== 'lab'}
+  <div class="body" class:split={viewMode === 'split'}>
+    {#if panel && panel !== 'style' && panel !== 'zone'}
       <aside class="panel">
         {#if panel === 'toc'}
           <h3>Contents</h3>
@@ -361,7 +372,7 @@
       </aside>
     {/if}
 
-    <div class="stage">
+    <div class="stage" class:stage-hidden={viewMode === 'lab'}>
       {#if error}
         <div class="center">
           <h2>Can't open this book</h2>
@@ -406,15 +417,15 @@
       {/if}
     </div>
 
+    {#if viewMode !== 'book' && book}
+      <div class="lab-stage">
+        <LabPanel {bookId} bookTitle={book.title} />
+      </div>
+    {/if}
+
     {#if panel === 'zone' && book}
       <aside class="panel right wide">
         <ZonePanel bookId={bookId} {chad} context={zoneContext} onJump={(loc) => { goToLocator(loc); if (window.innerWidth < 900) panel = null }} />
-      </aside>
-    {/if}
-
-    {#if panel === 'lab' && book}
-      <aside class="panel right wide">
-        <LabPanel {bookId} bookTitle={book.title} />
       </aside>
     {/if}
 
@@ -479,11 +490,13 @@
     </div>
   {/if}
 
+  {#if viewMode !== 'lab'}
   <footer class="bar foot">
     <span class="loc">{label}</span>
     <input type="range" min="0" max="1" step="0.001" value={percent} onchange={seek} aria-label="Position in book" />
     <span class="pct">{formatPercent(percent)}</span>
   </footer>
+  {/if}
 </div>
 
 {#if editing}
@@ -562,6 +575,20 @@
     flex: 1;
     min-width: 0;
     position: relative;
+  }
+  .stage-hidden { display: none; }
+  .lab-stage {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .body.split .stage { flex: 1 1 50%; }
+  .body.split .lab-stage { flex: 1 1 50%; border-left: 1px solid var(--border); }
+  .view-seg { flex: none; }
+  .view-seg button { padding: 3px 12px; min-height: 28px; font-size: 12px; }
+  @media (max-width: 700px) {
+    .body.split { flex-direction: column; }
+    .body.split .lab-stage { border-left: none; border-top: 1px solid var(--border); }
   }
   .panel {
     width: 320px;

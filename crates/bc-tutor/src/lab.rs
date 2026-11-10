@@ -31,6 +31,10 @@ pub struct LabStep {
     /// What to actually do, in order.
     #[serde(default)]
     pub instructions: String,
+    /// Exact commands, code, config or values to use, when the lab has them.
+    /// Rendered as a code block; empty when the step is not command-based.
+    #[serde(default)]
+    pub code: String,
     /// Why this step matters / what concept from the book it exercises.
     #[serde(default)]
     pub why: String,
@@ -63,8 +67,21 @@ pub struct Lab {
     /// Ordered steps to prepare the environment before step 1.
     #[serde(default)]
     pub setup_steps: Vec<String>,
+    /// What the reader will be able to do after this lab (3–5 outcomes).
+    #[serde(default)]
+    pub outcomes: Vec<String>,
+    /// A short theory recap from the book that this lab puts into practice.
+    #[serde(default)]
+    pub theory: String,
+    /// The concrete artefact the reader produces (file, config, measurement…).
+    #[serde(default)]
+    pub deliverable: String,
     #[serde(default)]
     pub steps: Vec<LabStep>,
+    /// Diagrams for this lab (setup + workflow). New guides use this list.
+    #[serde(default)]
+    pub diagrams: Vec<LabDiagram>,
+    /// Single diagram from guides built before `diagrams` existed.
     #[serde(default)]
     pub diagram: LabDiagram,
     #[serde(default)]
@@ -97,6 +114,20 @@ pub struct LabGuide {
     pub capstone: String,
     #[serde(default)]
     pub safety_notes: Vec<String>,
+}
+
+impl Lab {
+    /// All diagrams for display/export, falling back to the legacy
+    /// single-diagram field on guides built before `diagrams` existed.
+    pub fn all_diagrams(&self) -> Vec<&LabDiagram> {
+        if !self.diagrams.is_empty() {
+            return self.diagrams.iter().collect();
+        }
+        if !self.diagram.mermaid.trim().is_empty() || !self.diagram.explanation.trim().is_empty() {
+            return vec![&self.diagram];
+        }
+        Vec::new()
+    }
 }
 
 impl LabGuide {
@@ -145,9 +176,25 @@ impl LabGuide {
             l.setup_requirements.truncate(12);
             l.setup_steps.retain(|s| !s.trim().is_empty());
             l.setup_steps.truncate(15);
+            l.outcomes.retain(|s| !s.trim().is_empty());
+            l.outcomes.truncate(6);
+            t(&mut l.theory);
+            t(&mut l.deliverable);
             l.steps
                 .retain(|s| !s.title.trim().is_empty() || !s.instructions.trim().is_empty());
             l.steps.truncate(20);
+            for s in &mut l.steps {
+                t(&mut s.code);
+            }
+            l.diagrams
+                .retain(|d| !d.mermaid.trim().is_empty() || !d.explanation.trim().is_empty());
+            l.diagrams.truncate(4);
+            for d in &mut l.diagrams {
+                t(&mut d.title);
+                t(&mut d.kind);
+                t(&mut d.mermaid);
+                t(&mut d.explanation);
+            }
             l.checks.retain(|c| !c.question.trim().is_empty());
             l.checks.truncate(6);
             l.troubleshooting.retain(|s| !s.trim().is_empty());
@@ -234,21 +281,37 @@ impl LabGuide {
                 }
                 out.push('\n');
             }
-            if !lab.diagram.mermaid.trim().is_empty() || !lab.diagram.explanation.trim().is_empty()
-            {
-                let dtitle = if lab.diagram.title.trim().is_empty() {
+            if !lab.outcomes.is_empty() {
+                out.push_str("### You will be able to\n\n");
+                for o in &lab.outcomes {
+                    out.push_str(&format!("- {o}\n"));
+                }
+                out.push('\n');
+            }
+            if !lab.theory.trim().is_empty() {
+                out.push_str("### The theory behind this lab\n\n");
+                out.push_str(&format!("{}\n\n", lab.theory.trim()));
+            }
+            if !lab.deliverable.trim().is_empty() {
+                out.push_str(&format!(
+                    "**You will produce:** {}\n\n",
+                    lab.deliverable.trim()
+                ));
+            }
+            for diagram in lab.all_diagrams() {
+                let dtitle = if diagram.title.trim().is_empty() {
                     "Diagram".to_string()
                 } else {
-                    lab.diagram.title.trim().to_string()
+                    diagram.title.trim().to_string()
                 };
                 out.push_str(&format!("### Diagram: {dtitle}\n\n"));
-                if !lab.diagram.mermaid.trim().is_empty() {
+                if !diagram.mermaid.trim().is_empty() {
                     out.push_str("```mermaid\n");
-                    out.push_str(lab.diagram.mermaid.trim());
+                    out.push_str(diagram.mermaid.trim());
                     out.push_str("\n```\n\n");
                 }
-                if !lab.diagram.explanation.trim().is_empty() {
-                    out.push_str(&format!("{}\n\n", lab.diagram.explanation.trim()));
+                if !diagram.explanation.trim().is_empty() {
+                    out.push_str(&format!("{}\n\n", diagram.explanation.trim()));
                 }
             }
             out.push_str("### Steps\n\n");
@@ -263,6 +326,11 @@ impl LabGuide {
                     out.push_str(&format!(" — {}", step.instructions.trim()));
                 }
                 out.push('\n');
+                if !step.code.trim().is_empty() {
+                    out.push_str("\n\n```\n");
+                    out.push_str(step.code.trim());
+                    out.push_str("\n```\n");
+                }
                 if !step.why.trim().is_empty() {
                     out.push_str(&format!("   - Why: {}\n", step.why.trim()));
                 }
@@ -360,7 +428,11 @@ mod tests {
         "concepts": ["IP addresses", ""],
         "setup_requirements": ["A laptop on your home Wi-Fi"],
         "setup_steps": ["Join your home Wi-Fi."],
-        "steps": [{"title": "Find your IP", "instructions": "Run ipconfig.", "why": "Anchors the chapter's addressing model.", "expected": "An address like 192.168.1.20.", "tip": ""}],
+        "outcomes": ["Read your own IP configuration"],
+        "theory": "Every device needs an address before it can talk.",
+        "deliverable": "A table of your devices and their addresses.",
+        "steps": [{"title": "Find your IP", "instructions": "Run ipconfig.", "code": "ipconfig", "why": "Anchors the chapter's addressing model.", "expected": "An address like 192.168.1.20.", "tip": ""}],
+        "diagrams": [{"title": "Home LAN", "kind": "topology", "mermaid": "graph LR\n  R[Router] --> L[Laptop]", "explanation": "The router connects every device."}, {"title": "Workflow", "kind": "flowchart", "mermaid": "graph TD\n  A[Run command] --> B[Record address]", "explanation": "Run, then record."}],
         "diagram": {"title": "Home LAN", "kind": "topology", "mermaid": "graph LR\n  R[Router] --> L[Laptop]", "explanation": "The router connects every device."},
         "checks": [{"question": "What is a gateway?", "answer": "The router's LAN address."}],
         "troubleshooting": ["No Wi-Fi? Use a cable."],
@@ -381,7 +453,23 @@ mod tests {
         assert!(md.contains("```mermaid"));
         assert!(md.contains("graph LR"));
         assert!(md.contains("1. **Find your IP**"));
+        assert!(md.contains("### The theory behind this lab"));
+        assert!(md.contains("**You will produce:** A table of your devices"));
+        assert!(md.contains("```\nipconfig\n```"), "step code block: {md}");
+        assert_eq!(g.labs[0].all_diagrams().len(), 2);
+        assert!(md.contains("### Diagram: Workflow"));
         assert!(md.contains("## Capstone"));
+    }
+
+    #[test]
+    fn legacy_single_diagram_guides_still_parse() {
+        // Guides stored by v0.1.3 have "diagram" but no diagrams/outcomes/theory/code.
+        let legacy = r#"{"overview":"o","labs":[{"title":"L","steps":[{"title":"S","instructions":"Do it."}],"diagram":{"title":"D","kind":"flowchart","mermaid":"graph TD\n A[X] --> B[Y]","explanation":"E"}}]}"#;
+        let g = LabGuide::parse(legacy).unwrap();
+        assert_eq!(g.labs[0].all_diagrams().len(), 1);
+        assert!(g.labs[0].outcomes.is_empty());
+        let md = g.to_markdown("T", None);
+        assert!(md.contains("### Diagram: D"));
     }
 
     #[test]

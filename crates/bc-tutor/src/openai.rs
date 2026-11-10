@@ -15,12 +15,14 @@ fn request(t: &Tutor, body: &Value) -> reqwest::RequestBuilder {
     rb
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete(
     t: &Tutor,
     model: &str,
     system: &str,
     user: &str,
     schema: Option<&Value>,
+    _max_tokens: u32,
 ) -> Result<(String, String)> {
     let mut body = json!({
         "model": model,

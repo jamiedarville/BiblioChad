@@ -16,9 +16,12 @@ You are given book metadata, a table of contents or outline when available, and 
 Design rules:
 - Give 3 to 7 labs unless asked for a specific count. Order them from foundational to advanced; later labs may build on earlier labs' output. Keep each lab completable in one sitting (15 to 120 minutes).
 - Each lab must be genuinely hands-on: the reader builds, runs, measures, configures, writes or observes something real — not just answers reading questions.
-- setup_requirements: everything needed before starting (software with versions where the book implies them, accounts, files, hardware, prior labs). setup_steps: ordered, concrete preparation steps a beginner can follow without guessing.
-- steps: 4 to 10 ordered steps. Each step has a short title, concrete instructions (exact actions; include exact commands, settings or values when the book gives them), why it matters in the book's terms, what the reader should see when it works, and a tip for the common snag.
-- diagram: one diagram per lab that genuinely helps: the setup topology, workflow, data flow, sequence of actions, or structure being built. Provide valid Mermaid syntax (prefer "graph TD" or "graph LR"; short plain-text node labels in square brackets, no quotes or parentheses inside labels) plus an explanation that walks through the diagram in words.
+- outcomes: 3 to 5 concrete abilities the reader will have after the lab ("you will be able to…"), each verifiable from the lab's output.
+- theory: a self-contained recap (roughly 150–350 words) of the book theory this lab exercises, in your own words, so the reader does not have to re-read the chapter first. Name the book's key terms and how they connect.
+- deliverable: the one concrete artefact the lab produces (a file, configuration, diagram, measurement table, working program…), stated so the reader knows when they are done.
+- setup_requirements: everything needed before starting (software with versions where the book implies them, accounts, files, hardware, prior labs). setup_steps: ordered, concrete preparation steps a beginner can follow without guessing, including how to verify the setup works before step 1.
+- steps: 6 to 12 ordered steps. Each step has a short title, concrete instructions (exact actions), a separate "code" field with the exact commands, code, configuration or values to type or use verbatim (empty string when the step is not command/code based — never invent commands the book does not support), why it matters in the book's terms, what the reader should see when it works (quote the expected output or state), and a tip for the common snag.
+- diagrams: exactly 2 diagrams per lab, in this order: (1) the setup — topology, environment or structure being built before starting; (2) the workflow — the sequence of actions, data flow or cause-and-effect the steps follow. Each diagram has valid Mermaid syntax (prefer "graph TD" or "graph LR"; short plain-text node labels in square brackets, no quotes or parentheses inside labels) plus an explanation that walks through the diagram in words and ties its parts to the lab steps.
 - checks: 2 or 3 questions the reader can answer only if the lab worked, with answers.
 - troubleshooting: the 2 or 3 most likely failures and how to fix or diagnose them.
 - extension: one harder follow-up for readers who finish early.
@@ -124,12 +127,15 @@ pub fn lab_schema() -> Value {
             "concepts": arr(s()),
             "setup_requirements": arr(s()),
             "setup_steps": arr(s()),
+            "outcomes": arr(s()),
+            "theory": s(),
+            "deliverable": s(),
             "steps": arr(obj(json!({
-                "title": s(), "instructions": s(), "why": s(), "expected": s(), "tip": s()
+                "title": s(), "instructions": s(), "code": s(), "why": s(), "expected": s(), "tip": s()
             }))),
-            "diagram": obj(json!({
+            "diagrams": arr(obj(json!({
                 "title": s(), "kind": s(), "mermaid": s(), "explanation": s()
-            })),
+            }))),
             "checks": arr(obj(json!({ "question": s(), "answer": s() }))),
             "troubleshooting": arr(s()),
             "extension": s()

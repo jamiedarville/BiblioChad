@@ -39,13 +39,14 @@ pub(crate) async fn complete(
     system: &str,
     user: &str,
     schema: Option<&Value>,
+    max_tokens: u32,
 ) -> Result<(String, String)> {
     // Fallbacks are a Claude API feature; skip them behind custom proxies.
     let fallback =
         supports_default_fallback(model) && t.config.effective_base_url() == DEFAULT_ANTHROPIC_BASE;
     let mut body = json!({
         "model": model,
-        "max_tokens": 16000,
+        "max_tokens": max_tokens,
         "system": [{ "type": "text", "text": system, "cache_control": { "type": "ephemeral" } }],
         "messages": [{ "role": "user", "content": user }],
     });

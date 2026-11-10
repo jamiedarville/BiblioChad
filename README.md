@@ -81,13 +81,15 @@ charges apply. Maps are saved locally and are not synced to Drive. The code is i
 
 ### Build a lab
 
-Open the **Build a lab** panel (the flask button in the reader's toolbar) and the same LLM analyses the
-whole book — short books in full, long books sampled evenly from the beginning, middle and end, plus the
-contents/outline — and designs a series of hands-on labs: what to set up, ordered step-by-step instructions
-with the reason for each step and what you should see, a diagram for every lab (drawn in the panel, kept as
-Mermaid in exports), self-checks, troubleshooting and a harder follow-up. Pick 3–7 labs and an optional focus;
-your Learning-zone background and goal pitch the level. Generating can take a minute or two and your provider's
-charges apply; scanned PDFs with no selectable text can't be labbed.
+Use the **Book / Lab / Split** tabs in the reader's toolbar: the lab gets its own full page (with a lab
+index, progress and prev/next navigation), or sits beside the book in Split view while you work. The same LLM
+analyses the whole book — short books in full, long books sampled evenly from the beginning, middle and end,
+plus the contents/outline — and designs a series of detailed hands-on labs: a theory recap and learning
+outcomes for each lab, what to set up, two diagrams per lab (setup and workflow, drawn in the page and kept
+as Mermaid in exports), ordered step-by-step instructions with exact commands/code where the book supports
+them, the reason for each step and what you should see, self-checks, troubleshooting and a harder follow-up.
+Pick 3–7 labs and an optional focus; your Learning-zone background and goal pitch the level. Generating can
+take a few minutes and your provider's charges apply; scanned PDFs with no selectable text can't be labbed.
 
 The guide is saved locally with the book (one per book; rebuilding replaces it), so it loads again every time
 the book opens. Tick steps off as you work (ticks stay on this device), export the whole guide as Markdown

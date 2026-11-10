@@ -274,10 +274,11 @@ impl Tutor {
             .with_retries(|| async {
                 match self.config.provider {
                     Provider::Anthropic => {
-                        anthropic::complete(self, &model, &system, &user, Some(&schema)).await
+                        anthropic::complete(self, &model, &system, &user, Some(&schema), 16_000)
+                            .await
                     }
                     Provider::OpenaiCompatible => {
-                        openai::complete(self, &model, &system, &user, Some(&schema)).await
+                        openai::complete(self, &model, &system, &user, Some(&schema), 16_000).await
                     }
                 }
             })
@@ -304,10 +305,11 @@ impl Tutor {
             .with_retries(|| async {
                 match self.config.provider {
                     Provider::Anthropic => {
-                        anthropic::complete(self, &model, &system, &user, Some(&schema)).await
+                        anthropic::complete(self, &model, &system, &user, Some(&schema), 32_768)
+                            .await
                     }
                     Provider::OpenaiCompatible => {
-                        openai::complete(self, &model, &system, &user, Some(&schema)).await
+                        openai::complete(self, &model, &system, &user, Some(&schema), 32_768).await
                     }
                 }
             })

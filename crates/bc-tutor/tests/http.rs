@@ -237,8 +237,9 @@ fn labs_json() -> String {
             "title": "First lab", "objective": "Do the thing.", "difficulty": "beginner",
             "estimated_minutes": 20, "source_refs": ["Chapter 1"], "concepts": ["Addresses"],
             "setup_requirements": ["A laptop"], "setup_steps": ["Turn it on."],
-            "steps": [{ "title": "Run it", "instructions": "Run the command.", "why": "Practice.", "expected": "Output.", "tip": "" }],
-            "diagram": { "title": "Setup", "kind": "topology", "mermaid": "graph LR\n  A[Laptop] --> B[Router]", "explanation": "One link." },
+            "outcomes": ["Run the command"], "theory": "Addresses first.", "deliverable": "Command output.",
+            "steps": [{ "title": "Run it", "instructions": "Run the command.", "code": "ip a", "why": "Practice.", "expected": "Output.", "tip": "" }],
+            "diagrams": [{ "title": "Setup", "kind": "topology", "mermaid": "graph LR\n  A[Laptop] --> B[Router]", "explanation": "One link." }],
             "checks": [{ "question": "Did it work?", "answer": "Yes, if output appeared." }],
             "troubleshooting": [], "extension": ""
         }],
@@ -280,6 +281,8 @@ async fn anthropic_labs_shape_and_parse() {
         .await
         .unwrap();
     assert_eq!(out.guide.labs[0].title, "First lab");
+    assert_eq!(out.guide.labs[0].all_diagrams().len(), 1);
+    assert_eq!(out.guide.labs[0].steps[0].code, "ip a");
     assert!(out
         .guide
         .to_markdown("Networking", None)
