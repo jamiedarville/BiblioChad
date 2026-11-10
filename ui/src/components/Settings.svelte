@@ -1,6 +1,5 @@
 <script lang="ts">
   import { confirmAction } from '../lib/dialogs'
-  import { isAndroid } from '../lib/platform'
   import { onMount } from 'svelte'
   import { open as openDialog } from '@tauri-apps/plugin-dialog'
   import { openUrl } from '@tauri-apps/plugin-opener'
@@ -28,7 +27,6 @@
   let cache = $state<CacheStats | null>(null)
   let info = $state<AppInfo | null>(null)
   let stats = $state<Stats | null>(null)
-  const privacyUrl = import.meta.env.VITE_BIBLIOCHAD_PRIVACY_URL as string | undefined
   let connecting = $state(false)
   let picking = $state(false)
   let stack = $state<FolderEntry[]>([])
@@ -204,7 +202,6 @@
   <main>
     <section class="card">
       <h2>Google Drive</h2>
-      {#if isAndroid}<p class="muted">Drive is optional. Google handles account selection and permissions. Your books remain private; BiblioChad only writes reading progress and highlights to its hidden app-data folder.</p>{/if}
       {#if status}
         {#if !status.configured}
           <p>
@@ -275,21 +272,10 @@
         <p class="muted small">
           When you map a page, its text, what you told the assistant about yourself for that book, and your highlights on the page are sent to the provider above
           using your key, and the provider's charges apply. Nothing is sent until you ask for a map.
-          {isAndroid ? 'The key is stored in BiblioChad\'s private app storage on this device.' : 'The key is stored in your system keychain, not in a file.'}
+          The key is stored in your system keychain, not in a file.
         </p>
       {/if}
     </section>
-
-    {#if isAndroid}
-      <section class="card">
-        <h2>Privacy</h2>
-        <p>Imported books, reading positions, highlights and collections are stored privately on this device. There are no ads or analytics in BiblioChad. Optional Drive sync sends reading data directly to your Google Drive app-data folder. The optional learning assistant sends the page you ask it to map directly to the AI provider you configure.</p>
-        <p>Disconnect Drive above to stop sync. To remove all local copies and reading data, use Android Settings → Apps → BiblioChad → Storage → Clear storage. This does not delete your original books or the sync file in Google Drive.</p>
-        {#if privacyUrl?.startsWith('https://')}
-          <button onclick={() => openUrl(privacyUrl!).catch((e) => toasts.push('error', errorMessage(e)))}>Privacy policy</button>
-        {/if}
-      </section>
-    {/if}
 
     <section class="card">
       <h2>Appearance</h2>

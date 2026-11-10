@@ -1,6 +1,6 @@
 <script lang="ts">
   import { save as saveDialog } from '@tauri-apps/plugin-dialog'
-  import { api, errorMessage, type BookDetails, type Collection, type ReadStatus } from '../lib/api'
+  import { api, errorMessage, type BookDetails, type Collection, type LabOverview, type ReadStatus } from '../lib/api'
   import { toasts } from '../lib/toast.svelte'
   import { formatBytes, formatPercent, timeAgo } from '../lib/util'
   import Cover from './Cover.svelte'
@@ -8,6 +8,7 @@
   let { id, onClose, onOpen }: { id: number; onClose: () => void; onOpen: (id: number) => void } = $props()
 
   let book = $state<BookDetails | null>(null)
+  let labs = $state<LabOverview | null>(null)
   let collections = $state<Collection[]>([])
   let editing = $state(false)
   let title = $state('')
@@ -17,6 +18,7 @@
   async function load() {
     try {
       book = await api.bookDetails(id)
+      labs = await api.labOverview(id).catch(() => null)
       collections = await api.collections()
       title = book.title_override ?? ''
       author = book.author_override ?? ''
@@ -43,6 +45,17 @@
   async function saveOverrides() {
     await run(() => api.setOverrides(id, title || null, author || null, series || null))
     editing = false
+  }
+
+  async function exportLabs() {
+    if (!book) return
+    const dest = await saveDialog({
+      defaultPath: `${book.title.replace(/[\\/:*?"<>|]/g, '_')} - labs.md`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (!dest) return
+    await run(() => api.labExport(id, dest))
+    toasts.push('success', 'Labs exported.')
   }
 
   async function exportNotes() {
@@ -133,6 +146,10 @@
         <div class="row wrap">
           <button onclick={() => (editing = true)}>Edit title, author, series</button>
           <button onclick={exportNotes}>Export highlights (Markdown)</button>
+          {#if labs?.lab}
+            <button onclick={exportLabs}>Export labs (Markdown)</button>
+            <span class="muted small">{labs.lab.guide.labs.length} labs saved with this book{labs.stale ? ' (book file changed since)' : ''} — open the book and choose “Build a lab” to work through them.</span>
+          {/if}
           {#if book.key.startsWith('local:')}
             <button class="danger" onclick={() => run(() => api.removeLocalBook(id)).then(onClose)}>Remove from library</button>
           {/if}

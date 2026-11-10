@@ -37,19 +37,15 @@
     if (!panel?.isConnected) return
     const bounds = panel.getBoundingClientRect()
     left = Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))
-    const nativeHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--android-visible-height'))
-    const height = Math.min(window.innerHeight, nativeHeight || Infinity, window.visualViewport?.height ?? Infinity)
-    const safeTop = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--android-safe-top')) || 0
-    top = Math.max(safeTop + 8, Math.min(y, height - bounds.height - 8))
+    const height = Math.min(window.innerHeight, window.visualViewport?.height ?? Infinity)
+    top = Math.max(8, Math.min(y, height - bounds.height - 8))
   }
 
   $effect(() => {
     const viewport = window.visualViewport
     viewport?.addEventListener('resize', reposition)
-    window.addEventListener('android-viewport', reposition)
     return () => {
       viewport?.removeEventListener('resize', reposition)
-      window.removeEventListener('android-viewport', reposition)
     }
   })
 
@@ -181,7 +177,7 @@
     padding: 6px;
     min-width: 190px;
     max-width: calc(100vw - 16px);
-    max-height: calc(var(--android-visible-height, 100vh) - var(--android-safe-top, 0px) - 16px);
+    max-height: calc(100vh - 16px);
     overflow: auto;
     color: var(--text);
   }

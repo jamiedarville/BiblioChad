@@ -9,6 +9,7 @@
 mod cache;
 mod collections;
 mod covers;
+mod labs;
 mod nodes;
 mod notes;
 mod progress;
@@ -26,6 +27,7 @@ use rusqlite::Connection;
 pub use cache::{CacheEntry, CacheStats};
 pub use collections::Collection;
 pub use covers::save_cover_thumbnail;
+pub use labs::{lab_fingerprint, LabGuideRecord};
 pub use nodes::{Breadcrumb, FolderListing, FolderSummary, NodeRecord, Source, SourceKind};
 pub use notes::{Annotation, Bookmark, NewAnnotation};
 pub use progress::{ProgressRecord, Stats};
@@ -96,7 +98,7 @@ impl Library {
     pub fn wipe(&self) -> Result<()> {
         let c = self.conn();
         c.execute_batch(
-            "DELETE FROM zone_maps; DELETE FROM zone_profiles; DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
+            "DELETE FROM lab_guides; DELETE FROM zone_maps; DELETE FROM zone_profiles; DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
              DELETE FROM bookmarks; DELETE FROM progress; DELETE FROM cache_entries;
              DELETE FROM books; DELETE FROM nodes; DELETE FROM sources; DELETE FROM accounts;
              DELETE FROM reading_days; DELETE FROM settings WHERE key <> 'device_id';",

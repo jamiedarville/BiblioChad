@@ -1,6 +1,6 @@
 name: Release
 
-# Builds both Windows versions and the Arch Linux package, and publishes them
+# Builds the Windows ARM64 installers and the Arch Linux package, and publishes them
 # as a GitHub Release.
 # Start it either by pushing a tag like v0.1.0, or with "Run workflow" on the
 # Actions tab (that creates the tag v<version from tauri.conf.json>).
@@ -35,7 +35,7 @@ jobs:
       - name: Collect assets with stable names
         run: |
           mkdir -p release
-          for arch in x64 arm64; do
+          for arch in arm64; do
             d=dist/bibliochad-windows-$arch
             cp "$(find "$d" -name '*-setup.exe' | head -1)" "release/BiblioChad-Setup-$arch.exe"
             cp "$(find "$d" -name '*.msi' | head -1)"       "release/BiblioChad-$arch.msi"
@@ -61,8 +61,7 @@ jobs:
 
           | Your PC | Installer | Other |
           |---|---|---|
-          | **Intel / AMD** (x64) | [BiblioChad-Setup-x64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-x64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-x64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-x64.zip) |
-          | **ARM** (Snapdragon / Copilot+) | [BiblioChad-Setup-arm64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-arm64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-arm64.zip) |
+          | **Windows ARM64** (Snapdragon / Copilot+) | [BiblioChad-Setup-arm64.exe](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Setup-arm64.exe) | [MSI](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-arm64.msi) · [Portable zip](https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/BiblioChad-Portable-arm64.zip) |
 
           **Arch Linux** (x86_64, and derivatives such as CachyOS, EndeavourOS, Manjaro):
 

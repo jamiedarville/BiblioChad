@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bc_tutor::{Learner, Provider, Tutor, TutorConfig, TutorError, ZoneRequest};
+use bc_tutor::{LabRequest, Learner, Provider, Tutor, TutorConfig, TutorError, ZoneRequest};
 use serde_json::{json, Value};
 use wiremock::matchers::{header, header_exists, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -189,6 +189,29 @@ async fn openai_compatible_shape_and_parse() {
 }
 
 #[tokio::test]
+async fn openai_ping_sends_no_token_cap() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |r: &Request| {
+            let body: Value = serde_json::from_slice(&r.body).unwrap();
+            // Newer OpenAI models return 400 for `max_tokens`.
+            assert!(body.get("max_tokens").is_none());
+            ResponseTemplate::new(200).set_body_json(json!({
+                "model": "gpt",
+                "choices": [{ "finish_reason": "stop", "message": { "content": "OK" } }]
+            }))
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    tutor(&server, Provider::OpenaiCompatible, "gpt")
+        .ping()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn ping_reports_missing_model() {
     let server = MockServer::start().await;
     Mock::given(path("/v1/messages"))
@@ -202,6 +225,76 @@ async fn ping_reports_missing_model() {
         .await
         .unwrap_err();
     assert_eq!(e.kind(), "tutor_model");
+}
+
+fn labs_json() -> String {
+    json!({
+        "overview": "Practice the book.",
+        "audience": "Beginners.",
+        "prerequisites": [],
+        "tools_overview": "A laptop.",
+        "labs": [{
+            "title": "First lab", "objective": "Do the thing.", "difficulty": "beginner",
+            "estimated_minutes": 20, "source_refs": ["Chapter 1"], "concepts": ["Addresses"],
+            "setup_requirements": ["A laptop"], "setup_steps": ["Turn it on."],
+            "outcomes": ["Run the command"], "theory": "Addresses first.", "deliverable": "Command output.",
+            "steps": [{ "title": "Run it", "instructions": "Run the command.", "code": "ip a", "why": "Practice.", "expected": "Output.", "tip": "" }],
+            "diagrams": [{ "title": "Setup", "kind": "topology", "mermaid": "graph LR\n  A[Laptop] --> B[Router]", "explanation": "One link." }],
+            "checks": [{ "question": "Did it work?", "answer": "Yes, if output appeared." }],
+            "troubleshooting": [], "extension": ""
+        }],
+        "capstone": "", "safety_notes": []
+    })
+    .to_string()
+}
+
+#[tokio::test]
+async fn anthropic_labs_shape_and_parse() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(move |r: &Request| {
+            let body: Value = serde_json::from_slice(&r.body).unwrap();
+            assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+            let user = body["messages"][0]["content"].as_str().unwrap();
+            assert!(user.contains("<book_text>"));
+            assert!(user.contains("Every device needs an address"));
+            ResponseTemplate::new(200).set_body_json(json!({
+                "model": "claude-opus-5-5", "stop_reason": "end_turn",
+                "content": [{ "type": "text", "text": labs_json() }]
+            }))
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    let req = LabRequest {
+        title: "Networking".into(),
+        excerpt: "Every device needs an address...".into(),
+        learner: Learner {
+            stretch: 3,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let out = tutor(&server, Provider::Anthropic, "")
+        .generate_labs(&req)
+        .await
+        .unwrap();
+    assert_eq!(out.guide.labs[0].title, "First lab");
+    assert_eq!(out.guide.labs[0].all_diagrams().len(), 1);
+    assert_eq!(out.guide.labs[0].steps[0].code, "ip a");
+    assert!(out
+        .guide
+        .to_markdown("Networking", None)
+        .contains("```mermaid"));
+    let empty = LabRequest {
+        excerpt: "  ".into(),
+        ..req
+    };
+    assert!(tutor(&server, Provider::Anthropic, "")
+        .generate_labs(&empty)
+        .await
+        .is_err());
 }
 
 #[tokio::test]

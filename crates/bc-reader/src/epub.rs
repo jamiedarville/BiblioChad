@@ -474,6 +474,131 @@ pub fn parse_opf(xml: &str, opf_path: &str) -> Result<Package> {
     })
 }
 
+/// One spine document reduced to plain text, in reading order.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+pub struct BookSection {
+    /// Archive file name (e.g. "ch1.xhtml") — a stable, book-local label.
+    pub label: String,
+    pub text: String,
+}
+
+/// Convert XHTML to plain text: scripts/styles dropped, block elements
+/// become line breaks, entities decoded. Good enough for LLM analysis and
+/// search; the reader itself renders the original markup.
+pub fn xhtml_to_text(xhtml: &str) -> String {
+    let lower = xhtml.to_ascii_lowercase();
+    let mut out = String::with_capacity(xhtml.len() / 2);
+    let bytes = xhtml.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'<' {
+            let Some(end) = xhtml[i..].find('>') else {
+                break;
+            };
+            let tag = &lower[i + 1..i + end];
+            let name = tag
+                .trim_start_matches('/')
+                .split([' ', '/', '\t'])
+                .next()
+                .unwrap_or("");
+            if (name == "script" || name == "style") && !tag.starts_with('/') {
+                if let Some(close) = lower[i + end..].find(&format!("</{name}")) {
+                    i += end + close;
+                    continue;
+                }
+            }
+            if matches!(
+                name,
+                "p" | "div"
+                    | "br"
+                    | "li"
+                    | "tr"
+                    | "h1"
+                    | "h2"
+                    | "h3"
+                    | "h4"
+                    | "h5"
+                    | "h6"
+                    | "section"
+                    | "article"
+                    | "blockquote"
+                    | "pre"
+            ) {
+                out.push('\n');
+            }
+            i += end + 1;
+        } else {
+            let next = xhtml[i..].find('<').map(|o| i + o).unwrap_or(bytes.len());
+            out.push_str(&decode_entities(&xhtml[i..next]));
+            i = next;
+        }
+    }
+    out.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn decode_entities(s: &str) -> String {
+    if !s.contains('&') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(pos) = rest.find('&') {
+        out.push_str(&rest[..pos]);
+        let Some(semi) = rest[pos..].find(';') else {
+            out.push_str(&rest[pos..]);
+            return out;
+        };
+        let ent = &rest[pos + 1..pos + semi];
+        let decoded = match ent {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "nbsp" => Some(' '),
+            _ => ent
+                .strip_prefix("#x")
+                .or_else(|| ent.strip_prefix("#X"))
+                .and_then(|h| u32::from_str_radix(h, 16).ok())
+                .or_else(|| ent.strip_prefix('#')?.parse().ok())
+                .and_then(char::from_u32),
+        };
+        match decoded {
+            Some(c) => out.push(c),
+            None => out.push_str(&rest[pos..=pos + semi]),
+        }
+        rest = &rest[pos + semi + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+impl EpubArchive {
+    /// Plain text of every spine document, in reading order. Unreadable or
+    /// empty spine items are skipped. Used for whole-book analysis
+    /// ("Build a lab"), never for rendering.
+    pub fn extract_sections(&mut self) -> Result<Vec<BookSection>> {
+        let pkg = self.package()?;
+        let mut sections = Vec::new();
+        for path in &pkg.spine {
+            let Ok(raw) = self.read_string(path) else {
+                continue;
+            };
+            let text = xhtml_to_text(&raw);
+            if text.is_empty() {
+                continue;
+            }
+            let label = path.rsplit('/').next().unwrap_or(path.as_str()).to_string();
+            sections.push(BookSection { label, text });
+        }
+        Ok(sections)
+    }
+}
+
 /// Best-effort mime type for an archive entry, by extension.
 pub fn mime_for(name: &str) -> &'static str {
     let lower = name.to_ascii_lowercase();
@@ -664,6 +789,30 @@ pub(crate) mod tests {
             a.read("OEBPS/bomb.bin"),
             Err(ReaderError::TooLarge(_))
         ));
+    }
+
+    #[test]
+    fn extracts_section_text() {
+        assert_eq!(
+            xhtml_to_text("<html><head><style>p{}</style><script>evil()</script></head><body><h1>Ch 1</h1><p>Fish &amp; chips &#8212; tasty.</p><p>Second&nbsp;para.</p></body></html>"),
+            "Ch 1\nFish & chips — tasty.\nSecond para."
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("b.epub");
+        make_epub(
+            &p,
+            EPUB3_OPF,
+            &[
+                ("OEBPS/text/ch1.xhtml", b"<p>Alpha text.</p>" as &[u8]),
+                ("OEBPS/text/ch2.xhtml", b"<p>Beta &lt;text&gt;.</p>"),
+            ],
+        );
+        let mut a = EpubArchive::open(&p).unwrap();
+        let sections = a.extract_sections().unwrap();
+        assert_eq!(sections.len(), 2);
+        assert_eq!(sections[0].label, "ch1.xhtml");
+        assert_eq!(sections[0].text, "Alpha text.");
+        assert_eq!(sections[1].text, "Beta <text>.");
     }
 
     #[test]

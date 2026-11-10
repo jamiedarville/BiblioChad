@@ -15,12 +15,14 @@ fn request(t: &Tutor, body: &Value) -> reqwest::RequestBuilder {
     rb
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete(
     t: &Tutor,
     model: &str,
     system: &str,
     user: &str,
     schema: Option<&Value>,
+    _max_tokens: u32,
 ) -> Result<(String, String)> {
     let mut body = json!({
         "model": model,
@@ -65,7 +67,8 @@ pub(crate) async fn ping(t: &Tutor, model: &str) -> Result<()> {
     let body = json!({
         "model": model,
         "messages": [{ "role": "user", "content": "Reply with OK." }],
-        "max_tokens": 16,
+        // No length cap: newer OpenAI models reject `max_tokens`, and some
+        // compatible servers don't know `max_completion_tokens`.
     });
     let res = request(t, &body).send().await?;
     let status = res.status().as_u16();

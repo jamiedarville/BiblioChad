@@ -1,7 +1,6 @@
 <script lang="ts">
   // Virtualized grid/list: only rows near the viewport are rendered, so a
   // 5,000-book library scrolls smoothly.
-  import { isAndroid } from '../lib/platform'
   import type { BookSummary } from '../lib/api'
   import Cover from './Cover.svelte'
   import BookContextMenu from './BookContextMenu.svelte'
@@ -129,10 +128,10 @@
                 <span class="author">{b.author ?? ''}</span>
                 <button
                   class="ghost icon more"
-                  aria-label="{isAndroid ? 'Actions' : 'Details'} for {b.title}"
+                  aria-label="Details for {b.title}"
                   onclick={(e) => {
                     e.stopPropagation()
-                    if (!context) { if (isAndroid) openContext(e, b); else onDetails(b.id) }
+                    if (!context) onDetails(b.id)
                   }}>⋯</button
                 >
               </div>
@@ -148,10 +147,10 @@
             {#if b.favorite}<span title="Favorite">★</span>{/if}
             <button
               class="ghost icon"
-              aria-label="{isAndroid ? 'Actions' : 'Details'} for {b.title}"
+              aria-label="Details for {b.title}"
               onclick={(e) => {
                 e.stopPropagation()
-                if (!context) { if (isAndroid) openContext(e, b); else onDetails(b.id) }
+                if (!context) onDetails(b.id)
               }}>⋯</button
             >
           {/if}

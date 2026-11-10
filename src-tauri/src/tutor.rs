@@ -5,8 +5,10 @@ use std::sync::Arc;
 
 use bc_core::{BookFormat, Locator};
 use bc_drive::TokenStore;
-use bc_library::{Library, ZoneFeedback, ZoneMap, ZoneProfile};
-use bc_tutor::{EarlierZone, Learner, Provider, ReaderMark, Tutor, TutorConfig, ZoneRequest};
+use bc_library::{lab_fingerprint, LabGuideRecord, Library, ZoneFeedback, ZoneMap, ZoneProfile};
+use bc_tutor::{
+    EarlierZone, LabRequest, Learner, Provider, ReaderMark, Tutor, TutorConfig, ZoneRequest,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
@@ -15,39 +17,10 @@ use crate::state::AppState;
 
 const CONFIG_KEY: &str = "tutor_config";
 const KEY_HINT_KEY: &str = "tutor_key_hint";
-/// Android has no desktop keyring; the key lives in the app's private
-/// database instead, which other apps can't read.
-#[cfg(target_os = "android")]
-const ANDROID_KEY_SETTING: &str = "tutor_api_key";
 
-/// Where the API key is kept.
+/// Where the API key is kept: the OS credential store.
 pub fn key_store(_lib: &Arc<Library>) -> Arc<dyn TokenStore> {
-    #[cfg(not(target_os = "android"))]
-    return Arc::new(bc_drive::KeyringStore::new("BiblioChad", "llm-api-key"));
-    #[cfg(target_os = "android")]
-    return Arc::new(SettingsStore(_lib.clone()));
-}
-
-#[cfg(target_os = "android")]
-struct SettingsStore(Arc<Library>);
-
-#[cfg(target_os = "android")]
-impl TokenStore for SettingsStore {
-    fn load(&self) -> bc_drive::Result<Option<String>> {
-        self.0
-            .setting(ANDROID_KEY_SETTING)
-            .map_err(|e| bc_drive::DriveError::Keyring(e.to_string()))
-    }
-    fn save(&self, key: &str) -> bc_drive::Result<()> {
-        self.0
-            .set_setting(ANDROID_KEY_SETTING, key)
-            .map_err(|e| bc_drive::DriveError::Keyring(e.to_string()))
-    }
-    fn clear(&self) -> bc_drive::Result<()> {
-        self.0
-            .delete_setting(ANDROID_KEY_SETTING)
-            .map_err(|e| bc_drive::DriveError::Keyring(e.to_string()))
-    }
+    Arc::new(bc_drive::KeyringStore::new("BiblioChad", "llm-api-key"))
 }
 
 impl From<bc_tutor::TutorError> for CmdError {
@@ -337,4 +310,184 @@ pub async fn zone_generate(
     Ok(state
         .lib
         .add_zone_map(id, &locator, &req.location, &guide, &out.model)?)
+}
+
+// ------------------------------------------------------------------ labs
+
+#[derive(Serialize)]
+pub struct LabOverview {
+    pub lab: Option<LabGuideRecord>,
+    /// The saved guide was built from a different version of the book file.
+    pub stale: bool,
+}
+
+fn current_fingerprint(state: &AppState, id: i64) -> CmdResult<String> {
+    let src = state.lib.book_source(id)?;
+    Ok(lab_fingerprint(&src.key, src.md5.as_deref()))
+}
+
+#[tauri::command]
+pub fn lab_overview(state: State<'_, AppState>, id: i64) -> CmdResult<LabOverview> {
+    let lab = state.lib.lab_guide(id)?;
+    let stale = match &lab {
+        Some(l) => l.fingerprint != current_fingerprint(&state, id)?,
+        None => false,
+    };
+    Ok(LabOverview { lab, stale })
+}
+
+#[tauri::command]
+pub fn lab_delete(state: State<'_, AppState>, id: i64) -> CmdResult<()> {
+    Ok(state.lib.delete_lab_guide(id)?)
+}
+
+/// Export the saved labs as a standalone Markdown artefact (Mermaid
+/// diagrams included as fenced blocks).
+#[tauri::command]
+pub fn lab_export(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    dest: String,
+) -> CmdResult<()> {
+    let record = state
+        .lib
+        .lab_guide(id)?
+        .ok_or_else(|| CmdError::new("not_found", "Build the labs first."))?;
+    let summary = state.lib.book_summary(id)?;
+    let guide: bc_tutor::LabGuide =
+        serde_json::from_value(record.guide).map_err(|e| CmdError::internal(e.to_string()))?;
+    let md = guide.to_markdown(&summary.title, summary.author.as_deref());
+    let _ = app;
+    std::fs::write(dest, md)?;
+    Ok(())
+}
+
+fn flatten_outline(items: &[bc_reader::pdf::OutlineItem], depth: usize, out: &mut Vec<String>) {
+    for item in items {
+        if !item.title.trim().is_empty() {
+            out.push(format!("{}{}", "  ".repeat(depth), item.title.trim()));
+        }
+        flatten_outline(&item.children, depth + 1, out);
+    }
+}
+
+/// Whole-book plain text + contents for lab building. EPUB text comes from
+/// the spine documents; PDF text from the selectable text layer.
+fn extract_book_text(
+    state: &AppState,
+    id: i64,
+    path: &std::path::Path,
+    format: BookFormat,
+) -> CmdResult<(String, String, Option<u32>)> {
+    match format {
+        BookFormat::Epub => {
+            let archive = crate::books::epub_archive(state, id, path)?;
+            let mut a = archive.lock().unwrap();
+            let sections = a.extract_sections()?;
+            if sections.is_empty() {
+                return Err(CmdError::new(
+                    "lab_empty",
+                    "This book has no readable text to build labs from.",
+                ));
+            }
+            let toc = sections
+                .iter()
+                .map(|s| {
+                    let first = s.text.lines().next().unwrap_or("").trim();
+                    if first.len() > 3 && first.chars().count() <= 120 {
+                        format!("{} — {}", s.label, first)
+                    } else {
+                        s.label.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let full = sections
+                .iter()
+                .map(|s| format!("[{}]\n{}", s.label, s.text))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            Ok((full, toc, None))
+        }
+        BookFormat::Pdf => {
+            let pdf = state.pdf()?;
+            let info = pdf.info(path)?;
+            let mut toc_lines = Vec::new();
+            if let Ok(outline) = pdf.outline(path) {
+                flatten_outline(&outline, 0, &mut toc_lines);
+            }
+            // Scanned books can be huge; 2000 pages is far beyond any real
+            // lab source and keeps a pathological file from running for ages.
+            let pages = info.page_count.min(2000);
+            let mut parts = Vec::new();
+            for p in 0..pages {
+                let t = pdf_page_text(state, path, p);
+                if !t.trim().is_empty() {
+                    parts.push(format!("[Page {}]\n{t}", p + 1));
+                }
+            }
+            if parts.is_empty() {
+                return Err(CmdError::new(
+                    "lab_empty",
+                    "This PDF has no selectable text (it may be a scan), so there is nothing to build labs from.",
+                ));
+            }
+            Ok((
+                parts.join("\n\n"),
+                toc_lines.join("\n"),
+                Some(info.page_count),
+            ))
+        }
+    }
+}
+
+/// Analyse the whole book and build its lab series. The guide is saved
+/// with the book and returned again by `lab_overview` on every later open.
+#[tauri::command]
+pub async fn lab_generate(
+    app: AppHandle,
+    id: i64,
+    lab_count: Option<u32>,
+    focus: Option<String>,
+) -> CmdResult<LabGuideRecord> {
+    let path = crate::books::ensure_local(&app, id).await?;
+    let app2 = app.clone();
+    let (req, tutor, fingerprint) = crate::commands::blocking(move || {
+        let state = app2.state::<AppState>();
+        let tutor = tutor(&state)?;
+        let src = state.lib.book_source(id)?;
+        let summary = state.lib.book_summary(id)?;
+        let fingerprint = lab_fingerprint(&src.key, src.md5.as_deref());
+        let (full, toc, page_count) = extract_book_text(&state, id, &path, src.format)?;
+        let sampled = full.chars().count() > bc_tutor::MAX_BOOK_CHARS;
+        let excerpt = bc_tutor::sample_book_text(&full, bc_tutor::MAX_BOOK_CHARS);
+        let profile = state.lib.zone_profile(id)?;
+        let req = LabRequest {
+            title: summary.title,
+            author: summary.author,
+            format: Some(src.format.as_str().to_string()),
+            page_count,
+            toc,
+            excerpt,
+            sampled,
+            learner: Learner {
+                background: profile.background,
+                goal: profile.goal,
+                stretch: profile.stretch,
+            },
+            lab_count: lab_count.filter(|n| (1..=10).contains(n)),
+            focus: focus
+                .map(|f| bc_tutor::clip(&f, 1000).to_string())
+                .unwrap_or_default(),
+        };
+        Ok((req, tutor, fingerprint))
+    })
+    .await?;
+    let out = tutor.generate_labs(&req).await?;
+    let guide = serde_json::to_value(&out.guide).map_err(|e| CmdError::internal(e.to_string()))?;
+    let state = app.state::<AppState>();
+    Ok(state
+        .lib
+        .save_lab_guide(id, &guide, &out.model, &fingerprint)?)
 }

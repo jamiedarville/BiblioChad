@@ -5,11 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bc_core::paths::AppPaths;
-#[cfg(not(target_os = "android"))]
-use bc_drive::KeyringStore;
-#[cfg(target_os = "android")]
-use bc_drive::MemoryStore;
-use bc_drive::{Auth, DriveClient, OAuthClient, TokenStore};
+use bc_drive::{Auth, DriveClient, KeyringStore, OAuthClient, TokenStore};
 use bc_library::Library;
 use bc_reader::epub::EpubArchive;
 use bc_reader::pdf::PdfEngine;
@@ -61,10 +57,7 @@ impl AppState {
             .connect_timeout(Duration::from_secs(15))
             .build()
             .map_err(|e| anyhow_like::Error(e.to_string()))?;
-        #[cfg(not(target_os = "android"))]
         let store: Arc<dyn TokenStore> = Arc::new(KeyringStore::default());
-        #[cfg(target_os = "android")]
-        let store: Arc<dyn TokenStore> = Arc::new(MemoryStore::default());
         let tutor_store = crate::tutor::key_store(&lib);
         let state = Self {
             paths,
@@ -106,25 +99,6 @@ impl AppState {
     }
 
     /// Rebuild the Drive client from the stored refresh token, if any.
-    #[cfg(target_os = "android")]
-    pub async fn restore_drive(&self, app: &tauri::AppHandle) {
-        if self
-            .lib
-            .setting("android_drive_connected")
-            .ok()
-            .flatten()
-            .as_deref()
-            != Some("true")
-        {
-            return;
-        }
-        match crate::mobile::drive_auth(app, false).await {
-            Ok(auth) => *self.drive.write().await = Some(self.make_drive_client(auth)),
-            Err(e) => tracing::warn!("Drive requires reconnection: {e}"),
-        }
-    }
-
-    #[cfg(not(target_os = "android"))]
     pub async fn restore_drive(&self, _app: &tauri::AppHandle) {
         let Some(client) = self.oauth_client() else {
             return;

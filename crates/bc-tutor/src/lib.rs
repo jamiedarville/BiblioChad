@@ -18,6 +18,8 @@
 
 mod anthropic;
 mod guide;
+mod lab;
+mod lab_prompt;
 mod openai;
 mod prompt;
 
@@ -26,6 +28,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 pub use guide::{CheckQuestion, KnownIdea, LaterIdea, ZoneGuide, ZoneItem};
+pub use lab::{sample_book_text, Lab, LabDiagram, LabGuide, LabStep};
+pub use lab_prompt::{lab_schema, lab_system_prompt, lab_user_message, MAX_BOOK_CHARS};
 pub use prompt::{system_prompt, user_message, zone_schema};
 
 pub const DEFAULT_ANTHROPIC_MODEL: &str = "claude-opus-5-5";
@@ -152,6 +156,35 @@ pub struct Generated {
     pub model: String,
 }
 
+/// Everything the "Build a lab" prompt is built from. `excerpt` is the
+/// book text to analyse: the whole book when short, otherwise an even
+/// sample produced by [`sample_book_text`].
+#[derive(Debug, Clone, Default)]
+pub struct LabRequest {
+    pub title: String,
+    pub author: Option<String>,
+    /// "epub" / "pdf", for the model's awareness only.
+    pub format: Option<String>,
+    pub page_count: Option<u32>,
+    /// Table of contents / outline, one entry per line.
+    pub toc: String,
+    pub excerpt: String,
+    /// True when `excerpt` is a sample of a longer book.
+    pub sampled: bool,
+    pub learner: Learner,
+    /// Ask for this many labs (1..=10); `None` lets the model choose 3–7.
+    pub lab_count: Option<u32>,
+    /// Optional extra steering from the reader.
+    pub focus: String,
+}
+
+/// A finished lab guide and the model that wrote it.
+#[derive(Debug, Clone)]
+pub struct GeneratedLabs {
+    pub guide: LabGuide,
+    pub model: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum TutorError {
     #[error("{0}")]
@@ -241,16 +274,48 @@ impl Tutor {
             .with_retries(|| async {
                 match self.config.provider {
                     Provider::Anthropic => {
-                        anthropic::complete(self, &model, &system, &user, Some(&schema)).await
+                        anthropic::complete(self, &model, &system, &user, Some(&schema), 16_000)
+                            .await
                     }
                     Provider::OpenaiCompatible => {
-                        openai::complete(self, &model, &system, &user, Some(&schema)).await
+                        openai::complete(self, &model, &system, &user, Some(&schema), 16_000).await
                     }
                 }
             })
             .await?;
         let guide = ZoneGuide::parse(&text)?;
         Ok(Generated {
+            guide,
+            model: used_model,
+        })
+    }
+
+    /// Build a whole-book lab series ("Build a lab").
+    pub async fn generate_labs(&self, req: &LabRequest) -> Result<GeneratedLabs> {
+        if req.excerpt.trim().is_empty() {
+            return Err(TutorError::NotConfigured(
+                "There is no readable text in this book to build labs from.".into(),
+            ));
+        }
+        let model = self.model()?;
+        let system = lab_system_prompt();
+        let user = lab_user_message(req);
+        let schema = lab_schema();
+        let (text, used_model) = self
+            .with_retries(|| async {
+                match self.config.provider {
+                    Provider::Anthropic => {
+                        anthropic::complete(self, &model, &system, &user, Some(&schema), 32_768)
+                            .await
+                    }
+                    Provider::OpenaiCompatible => {
+                        openai::complete(self, &model, &system, &user, Some(&schema), 32_768).await
+                    }
+                }
+            })
+            .await?;
+        let guide = LabGuide::parse(&text)?;
+        Ok(GeneratedLabs {
             guide,
             model: used_model,
         })
