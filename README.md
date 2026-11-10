@@ -35,7 +35,11 @@ Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
 
 The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
 
-**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.3 && git push origin v0.1.3`) or open **Actions → Release → Run workflow**. Both build the Windows ARM64 installers plus the Arch Linux package, and publish them as a GitHub Release.
+**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.4 && git push origin v0.1.4`) or open **Actions → Release → Run workflow**. Both build the Windows ARM64 installers plus the Arch Linux package, and publish them as a GitHub Release.
+
+## New in v0.1.4
+
+- **Labs are a full page**: use the new **Book / Lab / Split** tabs in the reader — work through labs full-screen like the book, or side by side with it in Split view. Each lab now has a theory recap, learning outcomes, a concrete deliverable, two diagrams (setup and workflow), 6–12 detailed steps with copyable commands/code, and a doubled generation budget so guides don't truncate. Labs saved by v0.1.3 still load; rebuild a book's labs for the fuller detail.
 
 ## New in v0.1.3
 
