@@ -23,6 +23,8 @@ These links always fetch the newest [release](https://github.com/jamiedarville/B
 
 Builds aren't code-signed yet, so Windows SmartScreen will warn on first run: click **More info → Run anyway**.
 
+To check a download, compare it with [**SHA256SUMS.txt**](https://github.com/jamiedarville/BiblioChad/releases/latest/download/SHA256SUMS.txt): `sha256sum -c SHA256SUMS.txt --ignore-missing` on Linux, or `Get-FileHash .\BiblioChad-Setup-arm64.exe` in PowerShell.
+
 ### Arch Linux (x86_64)
 
 Works on Arch and its derivatives (CachyOS, EndeavourOS, Manjaro):
@@ -35,7 +37,14 @@ Or build the package from a checkout: `cd packaging/arch && makepkg -si`.
 
 The Google Drive sign-in is kept in your desktop keyring through the Secret Service API, so one of GNOME Keyring, KWallet or KeePassXC needs to be running. GNOME and KDE Plasma set this up for you.
 
-**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.4 && git push origin v0.1.4`) or open **Actions → Release → Run workflow**. Both build the Windows ARM64 installers plus the Arch Linux package, and publish them as a GitHub Release.
+**Making a release:** bump the version in `src-tauri/tauri.conf.json`, the workspace `Cargo.toml`, both `package.json` files and their lockfiles, the workspace packages in `Cargo.lock`, and `packaging/arch/PKGBUILD`. Update this README and commit. Then either push a matching tag (`git tag v0.1.5 && git push origin v0.1.5`) or open **Actions → Release → Run workflow**. Both build the Windows ARM64 installers plus the Arch Linux package, and publish them as a GitHub Release.
+
+## New in v0.1.5
+
+- **Explain this passage**: select text in an EPUB or PDF, right-click (or use the selection toolbar, or **Ctrl/Cmd+E**) and choose **Explain** for a streamed explanation from your learning-assistant key. Copy it, regenerate it, or choose **Ask follow-up** to continue in book chat.
+- **Book chat**: a chat panel in the reader for questions about the book, grounded in the page you're on. Replies stream in, **Stop** keeps what has arrived, and each book's conversation is saved.
+- **Lab co-pilot**: ask questions about a lab, or ask it to change a step or diagram. Edits come back as a before/after preview that you **Apply** or **Reject**, and **Undo** restores the previous version. Edits replace existing steps and diagrams; they can't add, remove or reorder steps yet.
+- Selecting text across lines of a PDF now keeps the line breaks, so Explain and Copy get properly separated text.
 
 ## New in v0.1.4
 
