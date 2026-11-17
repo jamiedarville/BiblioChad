@@ -2,6 +2,7 @@
 // of the Rust structs in src-tauri/src/commands.rs and crates/bc-library.
 
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 export type BookFormat = 'epub' | 'pdf'
 export type ReadStatus = 'unread' | 'reading' | 'finished'
@@ -212,6 +213,63 @@ export interface TutorStatus extends TutorConfig {
 
 export type ZoneFeedback = 'too_easy' | 'just_right' | 'too_hard'
 
+/** BC-2 chat plumbing. The UI never sees the provider API key. */
+export type ChatRole = 'user' | 'assistant'
+
+export interface ChatMessage {
+  role: ChatRole
+  content: string
+}
+
+export type ChatContextMode = 'passage' | 'book'
+
+/** Payload of the `chat-delta` event; ignore other runs' events. */
+export interface ChatDelta {
+  run_id: string
+  book_id: number
+  text: string
+}
+
+export interface ChatReply {
+  run_id: string
+  /** Full authoritative reply text. */
+  text: string
+  model: string
+  /** The provider cut the answer off; `text` is the partial reply. */
+  truncated: boolean
+  /** Context mode actually used (BC-4+; absent from older replies). */
+  context_mode?: ChatContextMode
+  /** Whole-book context was sampled because the book is long. */
+  context_sampled?: boolean
+  /** Characters of book context available before sampling/clipping. */
+  context_chars?: number
+}
+
+/** One locally persisted book-chat message (BC-4). Never synced. */
+export interface BookChatMessage {
+  id: string
+  book_id: number
+  role: ChatRole
+  content: string
+  locator: Locator | null
+  label: string
+  model: string
+  context_mode: ChatContextMode
+  created_at: number
+}
+
+export interface ChatBookStatus {
+  available: boolean
+  /** The book is long, so whole-book context will be sampled. */
+  sampled: boolean
+  chars: number
+  reason: string | null
+}
+
+export function newChatRunId(): string {
+  return `chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export interface ZoneProfile {
   book_id: number
   background: string
@@ -321,6 +379,31 @@ export interface LabGuideRecord {
 export interface LabOverview {
   lab: LabGuideRecord | null
   stale: boolean
+  /** A one-step Undo revision from an applied co-pilot edit exists (BC-5). */
+  has_undo?: boolean
+}
+
+/** One locally persisted lab-chat message (BC-5). Never synced. */
+export interface LabChatMessage {
+  id: string
+  book_id: number
+  role: ChatRole
+  content: string
+  lab_index: number
+  step_index: number | null
+  label: string
+  model: string
+  created_at: number
+}
+
+/** A structured lab edit the co-pilot proposed (BC-5). In-place replacement only. */
+export type LabChange =
+  | { kind: 'replace_step'; lab_index: number; step_id: string; step: LabStep }
+  | { kind: 'replace_diagram'; lab_index: number; diagram_index: number; diagram: LabDiagram }
+
+export interface LabProposal {
+  summary?: string
+  changes: LabChange[]
 }
 
 export interface CmdError {
@@ -410,4 +493,71 @@ export const api = {
     invoke<LabGuideRecord>('lab_generate', { id, labCount, focus }),
   labDelete: (id: number) => invoke<void>('lab_delete', { id }),
   labExport: (id: number, dest: string) => invoke<void>('lab_export', { id, dest }),
+  /** Lab co-pilot (BC-5): one lab-attached chat turn; streams via onChatDelta. Sends nothing until called. */
+  labChatSend: (
+    id: number,
+    labIndex: number,
+    stepIndex: number | null,
+    history: ChatMessage[],
+    runId: string,
+    ticked: string[],
+    outline: string | null = null,
+  ) => invoke<ChatReply>('lab_chat_send', { id, labIndex, stepIndex, history, runId, ticked, outline }),
+  labChatHistory: (id: number) => invoke<LabChatMessage[]>('lab_chat_history', { id }),
+  labChatHistoryAppend: (
+    id: number,
+    role: ChatRole,
+    content: string,
+    labIndex: number,
+    stepIndex: number | null,
+    label: string,
+    model: string,
+  ) => invoke<LabChatMessage>('lab_chat_history_append', { id, role, content, labIndex, stepIndex, label, model }),
+  /** Delete this book's lab chat only; resolves with the number removed. */
+  labChatHistoryClear: (id: number) => invoke<number>('lab_chat_history_clear', { id }),
+  /** Persist a reader-confirmed proposal; Rust re-validates and refuses atomically when invalid. */
+  labProposalApply: (id: number, proposal: LabProposal) => invoke<LabGuideRecord>('lab_proposal_apply', { id, proposal }),
+  /** Restore the guide from before the last applied co-pilot edit, if any. */
+  labUndo: (id: number) => invoke<LabGuideRecord | null>('lab_undo', { id }),
+
+  /**
+   * Send one chat turn (the only chat path that reaches the provider).
+   * `history` ends with the new user message. Streamed chunks arrive via
+   * `onChatDelta`; the resolved value carries the full final text.
+   * Rejects with a CmdError: kind is one of `not_configured`,
+   * `tutor_auth`, `tutor_model`, `tutor_busy`, `tutor_refused`, `tutor`,
+   * `offline`, or `cancelled` (see `errorKind`).
+   */
+  chatSend: (
+    id: number,
+    locator: Locator,
+    label: string,
+    passage: string | null,
+    contextMode: ChatContextMode,
+    history: ChatMessage[],
+    runId: string,
+    outline: string | null = null,
+  ) => invoke<ChatReply>('chat_send', { id, locator, label, passage, contextMode, history, runId, outline }),
+  /** Cancel the in-flight run; its `chatSend` rejects with kind `cancelled`. */
+  chatCancel: (runId: string) => invoke<void>('chat_cancel', { runId }),
+  /** Locally saved book chat (BC-4), oldest first. Local DB read only. */
+  chatHistory: (id: number) => invoke<BookChatMessage[]>('chat_history', { id }),
+  chatHistoryAppend: (
+    id: number,
+    role: ChatRole,
+    content: string,
+    locator: Locator | null,
+    label: string,
+    model: string,
+    contextMode: ChatContextMode,
+  ) => invoke<BookChatMessage>('chat_history_append', { id, role, content, locator, label, model, contextMode }),
+  /** Delete this book's saved chat; resolves with the number removed. */
+  chatHistoryClear: (id: number) => invoke<number>('chat_history_clear', { id }),
+  /** Whether whole-book chat works for this book (device-local check). */
+  chatBookStatus: (id: number) => invoke<ChatBookStatus>('chat_book_status', { id }),
+  /** Subscribe to streamed chunks for one run. Call the returned fn to stop. */
+  onChatDelta: async (runId: string, cb: (delta: ChatDelta) => void): Promise<UnlistenFn> =>
+    listen<ChatDelta>('chat-delta', (e) => {
+      if (e.payload.run_id === runId) cb(e.payload)
+    }),
 }

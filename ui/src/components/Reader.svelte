@@ -20,8 +20,11 @@
   import { finishedLine, loadingLine, resumeLine, searchEmpty } from '../lib/chad'
   import { onBeforeClose } from '../lib/session'
   import { flattenToc, HIGHLIGHT_COLORS, type TocItem } from '../lib/epub/foliate'
+  import { clearExplainHandoff, loadExplainHandoff, trimSelection, type ExplainSeed } from '../lib/explain'
   import EpubView from './EpubView.svelte'
   import PdfView from './PdfView.svelte'
+  import ChatPanel, { type ChatSeed } from './ChatPanel.svelte'
+  import ExplainPanel from './ExplainPanel.svelte'
   import ZonePanel from './ZonePanel.svelte'
   import LabPanel from './LabPanel.svelte'
   import Icon from './Icon.svelte'
@@ -30,7 +33,14 @@
     bookId,
     download,
     onClose,
-  }: { bookId: number; download: { done: number; total: number | null } | null; onClose: () => void } = $props()
+    onOpenLearningSettings,
+  }: {
+    bookId: number
+    download: { done: number; total: number | null } | null
+    onClose: () => void
+    /** Deep-link to Settings → Learning assistant (App-level view). */
+    onOpenLearningSettings?: () => void
+  } = $props()
 
   let book = $state<OpenBook | null>(null)
   let error = $state<{ kind: string | null; message: string } | null>(null)
@@ -38,12 +48,19 @@
   let label = $state('')
   let locator = $state<Locator | null>(null)
   let toc = $state<{ label: string; href: string; depth: number }[]>([])
-  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone'>(null)
+  let panel = $state<null | 'toc' | 'marks' | 'search' | 'style' | 'zone' | 'chat'>(null)
+  /** BC-3 explain hand-off waiting to seed book chat (consumed once). */
+  let chatSeed = $state<ChatSeed | null>(null)
   /** Book alone, lab as a full page, or both side by side. The book stays
    * mounted (hidden) in lab view so the reading position is untouched. */
   let viewMode = $state<'book' | 'lab' | 'split'>('book')
   let prompt = $state<OpenBook['prompt']>(null)
   let selection = $state<{ cfi: string; text: string; percent: number } | null>(null)
+  let pdfSelection = $state<{ page: number; text: string } | null>(null)
+  /** Open Explain request (BC-3); the live selection is left untouched. */
+  let explainSeed = $state<ExplainSeed | null>(null)
+  /** Current PDF page -> has selectable text (null = not known yet). */
+  let pdfPageHasText = $state<boolean | null>(null)
   let editing = $state<Annotation | null>(null)
   let chromeVisible = $state(true)
   let query = $state('')
@@ -133,9 +150,14 @@
       e.preventDefault()
       book?.format === 'epub' ? epubView?.goLeft() : pdfView?.prev()
     } else if (k === 'Escape') {
-      if (panel) panel = null
+      if (explainSeed) explainSeed = null
+      else if (panel) panel = null
       else if (selection) selection = null
+      else if (pdfSelection) pdfSelection = null
       else close()
+    } else if ((e.ctrlKey || e.metaKey) && k.toLowerCase() === 'e' && (selection || pdfSelection)) {
+      e.preventDefault()
+      explainSelection()
     } else if ((e.ctrlKey || e.metaKey) && k === 'f') {
       e.preventDefault()
       panel = 'search'
@@ -190,10 +212,61 @@
   }
 
   async function copySelection() {
-    if (!selection) return
-    await navigator.clipboard.writeText(selection.text)
+    const text = selection?.text ?? pdfSelection?.text
+    if (!text) return
+    await navigator.clipboard.writeText(text)
     selection = null
+    pdfSelection = null
     toasts.push('info', 'Copied.')
+  }
+
+  /**
+   * BC-3 Explain: snapshot the live selection (which is left exactly as
+   * it is) and open the explanation. Empty selections are ignored;
+   * over-long ones are trimmed with a notice in the panel.
+   */
+  function explainSelection() {
+    if (!book) return
+    if (book.format === 'epub') {
+      const sel = selection
+      if (!sel?.text.trim()) return
+      const where = [label, formatPercent(sel.percent)].filter(Boolean).join(' · ')
+      explainSeed = {
+        source: 'epub',
+        locator: { kind: 'epub', cfi: sel.cfi, percent: sel.percent },
+        label: where,
+        passage: epubView?.passage() ?? '',
+        selection: trimSelection(sel.text),
+      }
+    } else {
+      const sel = pdfSelection
+      if (!sel?.text.trim()) {
+        if (pdfPageHasText === false) {
+          toasts.push('info', 'This page has no selectable text (it may be a scan), so there is nothing to explain.')
+        }
+        return
+      }
+      explainSeed = {
+        source: 'pdf',
+        locator: { kind: 'pdf', page: sel.page, offset: 0, fit: p.fit, zoom: p.zoom },
+        label: `Page ${sel.page + 1}${book.page_count ? ` of ${book.page_count}` : ''}`,
+        passage: null,
+        selection: trimSelection(sel.text),
+      }
+    }
+  }
+
+  /** Settings deep-link: save the reading position, close the book
+   * properly, then let App show Settings at Learning assistant. */
+  async function openLearningSettings() {
+    explainSeed = null
+    save.flush()
+    try {
+      await api.closeBook()
+    } catch {
+      /* progress is already saved locally */
+    }
+    ;(onOpenLearningSettings ?? onClose)()
   }
 
   function showAnnotation(cfi: string) {
@@ -252,6 +325,28 @@
     return { locator, label: where, passage: epubView?.passage() ?? '' }
   }
 
+  /** zoneContext plus the book outline, for book chat (BC-4). Reading
+   * this never moves the reader: it only snapshots where they are. */
+  function chatContext() {
+    const ctx = zoneContext()
+    if (!ctx) return null
+    const outline = toc.map((t) => '  '.repeat(t.depth) + t.label).join('\n')
+    return { ...ctx, outline: outline || null }
+  }
+
+  /** Open (or close) book chat, picking up any BC-3 explain hand-off. */
+  function toggleChat() {
+    if (panel === 'chat') {
+      panel = null
+      return
+    }
+    const h = loadExplainHandoff(bookId)
+    chatSeed = h
+      ? { history: h.history, chip: h.selectionText, locator: h.locator, label: h.label, model: h.model }
+      : null
+    panel = 'chat'
+  }
+
   function seek(e: Event) {
     const f = Number((e.target as HTMLInputElement).value)
     if (book?.format === 'epub') epubView?.goToFraction(f)
@@ -267,7 +362,10 @@
     const poke = () => {
       chromeVisible = true
       clearTimeout(idle)
-      idle = setTimeout(() => (chromeVisible = panel !== null || selection !== null), 3500)
+      idle = setTimeout(
+        () => (chromeVisible = panel !== null || selection !== null || pdfSelection !== null || explainSeed !== null),
+        3500,
+      )
     }
     window.addEventListener('pointermove', poke)
     poke()
@@ -303,6 +401,7 @@
       <button class="ghost icon" class:on={panel === 'marks'} title="Bookmarks and notes" aria-label="Bookmarks and notes" onclick={() => (panel = panel === 'marks' ? null : 'marks')}><Icon name="bookmark" /></button>
       <button class="ghost icon" class:on={panel === 'search'} title="Search (Ctrl+F)" aria-label="Search in book" onclick={() => (panel = panel === 'search' ? null : 'search')}><Icon name="search" /></button>
       <button class="ghost icon" class:on={panel === 'zone'} title="Learning zone" aria-label="Learning zone" onclick={() => (panel = panel === 'zone' ? null : 'zone')}><Icon name="zone" /></button>
+      <button class="ghost icon" class:on={panel === 'chat'} title="Book chat" aria-label="Book chat" onclick={toggleChat}><Icon name="chat" /></button>
       <button class="ghost icon" class:on={panel === 'style'} title="Display settings" aria-label="Display settings" onclick={() => (panel = panel === 'style' ? null : 'style')}><Icon name="type" /></button>
       <button class="ghost icon" title="Add bookmark (Ctrl+D)" aria-label="Add bookmark" onclick={addBookmark}><Icon name="bookmark-add" /></button>
       <button class="ghost icon" title="Fullscreen (F11)" aria-label="Toggle fullscreen" onclick={fullscreen}><Icon name="fullscreen" /></button>
@@ -318,7 +417,7 @@
   {/if}
 
   <div class="body" class:split={viewMode === 'split'}>
-    {#if panel && panel !== 'style' && panel !== 'zone'}
+    {#if panel && panel !== 'style' && panel !== 'zone' && panel !== 'chat'}
       <aside class="panel">
         {#if panel === 'toc'}
           <h3>Contents</h3>
@@ -398,6 +497,7 @@
           annotations={book.annotations}
           onRelocate={relocated}
           onSelection={(s) => (selection = s)}
+          onExplainRequest={explainSelection}
           onShowAnnotation={showAnnotation}
           onReady={(t: TocItem[]) => (toc = flattenToc(t))}
           onError={(m) => (error = { kind: 'book', message: m })}
@@ -413,19 +513,40 @@
           onRelocate={relocated}
           {onKey}
           onZoom={(z) => prefs.update((x) => (x.pdf.zoom = z))}
+          onSelection={(s) => (pdfSelection = s)}
+          onExplainRequest={explainSelection}
+          onTextState={(_page, hasText) => (pdfPageHasText = hasText)}
         />
       {/if}
     </div>
 
     {#if viewMode !== 'book' && book}
       <div class="lab-stage">
-        <LabPanel {bookId} bookTitle={book.title} />
+        <LabPanel {bookId} bookTitle={book.title} onOpenLearningSettings={openLearningSettings} />
       </div>
     {/if}
 
     {#if panel === 'zone' && book}
       <aside class="panel right wide">
         <ZonePanel bookId={bookId} {chad} context={zoneContext} onJump={(loc) => { goToLocator(loc); if (window.innerWidth < 900) panel = null }} />
+      </aside>
+    {/if}
+
+    {#if panel === 'chat' && book}
+      <aside class="panel right wide">
+        <ChatPanel
+          {bookId}
+          bookTitle={book.title}
+          bookAuthor={book.author}
+          context={chatContext}
+          loadHistory={() => api.chatHistory(bookId)}
+          appendHistory={(m) => api.chatHistoryAppend(bookId, m.role, m.content, m.locator, m.label, m.model, m.contextMode)}
+          clearHistory={async () => { await api.chatHistoryClear(bookId) }}
+          seed={chatSeed}
+          onSeedConsumed={() => { clearExplainHandoff(bookId); chatSeed = null }}
+          onOpenLearningSettings={openLearningSettings}
+          onClose={() => (panel = null)}
+        />
       </aside>
     {/if}
 
@@ -485,8 +606,43 @@
         <button class="swatch-btn" style:background={css} aria-label="Highlight {name}" onclick={() => highlight(name)}></button>
       {/each}
       <button onclick={() => highlight('yellow', true)}>Note</button>
+      <button onclick={explainSelection}>Explain</button>
       <button onclick={copySelection}>Copy</button>
       <button class="ghost icon" aria-label="Cancel" onclick={() => (selection = null)}>✕</button>
+    </div>
+  {:else if pdfSelection}
+    <div class="selbar card" role="toolbar" aria-label="Selection">
+      <button onclick={explainSelection}>Explain</button>
+      <button onclick={copySelection}>Copy</button>
+      <button class="ghost icon" aria-label="Cancel" onclick={() => (pdfSelection = null)}>✕</button>
+    </div>
+  {/if}
+
+  {#if book?.format === 'pdf' && !pdfSelection && !explainSeed}
+    {#if !p.textLayer}
+      <div class="pdf-hint muted small">Selectable text is off, so Explain isn't available. Turn it on in Display settings.</div>
+    {:else if pdfPageHasText === false}
+      <div class="pdf-hint muted small">This page has no selectable text (it may be a scan), so there is nothing to explain.</div>
+    {/if}
+  {/if}
+
+  {#if explainSeed && book}
+    <div
+      class="explain-backdrop"
+      role="presentation"
+      onclick={(e) => e.target === e.currentTarget && (explainSeed = null)}
+    >
+      <div class="explain-pop card" role="dialog" aria-label="Explain selected text">
+        <ExplainPanel
+          {bookId}
+          bookTitle={book.title}
+          bookAuthor={book.author}
+          seed={explainSeed}
+          onClose={() => (explainSeed = null)}
+          onOpenLearningSettings={openLearningSettings}
+          onAskFollowUp={() => { explainSeed = null; if (panel !== 'chat') toggleChat() }}
+        />
+      </div>
     </div>
   {/if}
 
@@ -733,6 +889,36 @@
   }
   .swatch-btn.sel {
     outline: 2px solid var(--text);
+  }
+  .pdf-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 56px;
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 15;
+    max-width: calc(100% - 32px);
+    text-align: center;
+  }
+  .explain-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+  }
+  .explain-pop {
+    width: min(440px, 100%);
+    margin: 12px;
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+  @media (max-width: 600px) {
+    .explain-pop { margin: 0; }
   }
   .foot {
     border-top: 1px solid var(--border);

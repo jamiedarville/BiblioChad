@@ -11,7 +11,10 @@
   import { runBeforeClose } from './lib/session'
   import { api } from './lib/api'
 
-  type View = { name: 'library' } | { name: 'reader'; bookId: number } | { name: 'settings' }
+  type View =
+    | { name: 'library' }
+    | { name: 'reader'; bookId: number }
+    | { name: 'settings'; section?: 'learning' }
 
   let view = $state<View>({ name: 'library' })
   let libraryVersion = $state(0)
@@ -86,9 +89,13 @@
         view = { name: 'library' }
         libraryVersion++
       }}
+      onOpenLearningSettings={() => {
+        view = { name: 'settings', section: 'learning' }
+        libraryVersion++
+      }}
     />
   {:else if view.name === 'settings'}
-    <Settings onBack={() => (view = { name: 'library' })} />
+    <Settings section={view.section} onBack={() => (view = { name: 'library' })} />
   {:else}
     <Library
       version={libraryVersion}

@@ -21,7 +21,15 @@
   import { achievements } from '../lib/chad'
   import Icon from './Icon.svelte'
 
-  let { onBack }: { onBack: () => void } = $props()
+  let { onBack, section }: { onBack: () => void; section?: 'learning' } = $props()
+
+  // Deep-link target (BC-3 Explain's tutor-not-ready guidance).
+  onMount(() => {
+    if (section !== 'learning') return
+    const el = document.getElementById('learning-assistant')
+    el?.scrollIntoView({ block: 'start' })
+    el?.querySelector<HTMLElement>('h2')?.focus()
+  })
 
   let status = $state<DriveStatus | null>(null)
   let cache = $state<CacheStats | null>(null)
@@ -236,8 +244,8 @@
       {/if}
     </section>
 
-    <section class="card">
-      <h2>Learning assistant</h2>
+    <section class="card" id="learning-assistant">
+      <h2 tabindex="-1">Learning assistant</h2>
       <p>
         Open the <strong>Learning zone</strong> panel while reading to map your <em>Zone of Proximal Development</em> for the
         page: what you already know, what you can reach with a few hints, and what can wait. Rate each map and the next one

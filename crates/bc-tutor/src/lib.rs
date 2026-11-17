@@ -17,8 +17,10 @@
 //! `/chat/completions` endpoint (OpenAI, OpenRouter, Ollama, LM Studio, ...).
 
 mod anthropic;
+mod chat;
 mod guide;
 mod lab;
+mod lab_edit;
 mod lab_prompt;
 mod openai;
 mod prompt;
@@ -27,8 +29,18 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+pub use chat::{
+    chat_context, chat_system_prompt, normalize_history, prepare_chat, trim_history, ChatMessage,
+    ChatReply, ChatRequest, ChatRole, CHAT_MAX_TOKENS, MAX_CHAT_MESSAGE_CHARS,
+    MAX_CHAT_TOTAL_CHARS, MAX_OUTLINE_CHARS,
+};
 pub use guide::{CheckQuestion, KnownIdea, LaterIdea, ZoneGuide, ZoneItem};
 pub use lab::{sample_book_text, Lab, LabDiagram, LabGuide, LabStep};
+pub use lab_edit::{
+    apply_proposal, build_lab_context, lab_chat_system_prompt, parse_proposal, parse_step_id,
+    preserved_ticks, step_id, validate_mermaid, validate_proposal, LabChange, LabProposal,
+    LAB_CHAT_EXCERPT_CHARS, MAX_LAB_CHAT_CONTEXT_CHARS,
+};
 pub use lab_prompt::{lab_schema, lab_system_prompt, lab_user_message, MAX_BOOK_CHARS};
 pub use prompt::{system_prompt, user_message, zone_schema};
 
@@ -197,7 +209,7 @@ pub enum TutorError {
     NotFound(String),
     #[error("The provider is busy or rate limited ({0}). Try again in a minute.")]
     Busy(String),
-    #[error("The provider declined to map this passage{0}.")]
+    #[error("The provider declined to answer{0}.")]
     Refused(String),
     #[error("The provider's answer was cut off before it finished. Try again, or choose a model with a larger output limit.")]
     Truncated,
@@ -207,6 +219,8 @@ pub enum TutorError {
     Invalid(String),
     #[error("Couldn't reach the provider: {0}")]
     Http(#[from] reqwest::Error),
+    #[error("Cancelled.")]
+    Cancelled,
 }
 
 impl TutorError {
@@ -221,6 +235,7 @@ impl TutorError {
             Self::Truncated => "tutor_truncated",
             Self::Provider { .. } | Self::Invalid(_) => "tutor",
             Self::Http(_) => "offline",
+            Self::Cancelled => "cancelled",
         }
     }
 }

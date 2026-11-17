@@ -7,8 +7,10 @@
 //! written to; overrides live only here.
 
 mod cache;
+mod chat;
 mod collections;
 mod covers;
+mod lab_chat;
 mod labs;
 mod nodes;
 mod notes;
@@ -25,8 +27,10 @@ use std::sync::{Mutex, MutexGuard};
 use rusqlite::Connection;
 
 pub use cache::{CacheEntry, CacheStats};
+pub use chat::BookChatMessage;
 pub use collections::Collection;
 pub use covers::save_cover_thumbnail;
+pub use lab_chat::LabChatMessage;
 pub use labs::{lab_fingerprint, LabGuideRecord};
 pub use nodes::{Breadcrumb, FolderListing, FolderSummary, NodeRecord, Source, SourceKind};
 pub use notes::{Annotation, Bookmark, NewAnnotation};
@@ -98,7 +102,7 @@ impl Library {
     pub fn wipe(&self) -> Result<()> {
         let c = self.conn();
         c.execute_batch(
-            "DELETE FROM lab_guides; DELETE FROM zone_maps; DELETE FROM zone_profiles; DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
+            "DELETE FROM lab_chat_messages; DELETE FROM lab_revisions; DELETE FROM book_chat_messages; DELETE FROM lab_guides; DELETE FROM zone_maps; DELETE FROM zone_profiles; DELETE FROM collection_books; DELETE FROM collections; DELETE FROM annotations;
              DELETE FROM bookmarks; DELETE FROM progress; DELETE FROM cache_entries;
              DELETE FROM books; DELETE FROM nodes; DELETE FROM sources; DELETE FROM accounts;
              DELETE FROM reading_days; DELETE FROM settings WHERE key <> 'device_id';",
