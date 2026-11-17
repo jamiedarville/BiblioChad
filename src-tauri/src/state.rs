@@ -1,6 +1,6 @@
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -27,6 +27,24 @@ fn default_cache_cap() -> u64 {
 
 pub const PREFS_KEY: &str = "prefs";
 
+/// The one in-flight chat stream (one reader panel). `cancelled` is
+/// checked before every delta; `abort` also wakes a task parked waiting
+/// for the next chunk from a slow model.
+pub struct ChatRun {
+    pub run_id: String,
+    pub cancelled: Arc<AtomicBool>,
+    pub abort: Option<tokio::task::AbortHandle>,
+}
+
+impl ChatRun {
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+        if let Some(a) = &self.abort {
+            a.abort();
+        }
+    }
+}
+
 pub struct AppState {
     pub paths: AppPaths,
     pub lib: Arc<Library>,
@@ -44,6 +62,8 @@ pub struct AppState {
     pub syncing: AtomicBool,
     /// Book to open once the UI is ready (from "Open with BiblioChad").
     pub pending_open: Mutex<Option<i64>>,
+    /// In-flight chat stream, if any (BC-2).
+    pub chat_run: Mutex<Option<ChatRun>>,
 }
 
 impl AppState {
@@ -73,6 +93,7 @@ impl AppState {
             sync_lock: tokio::sync::Mutex::new(()),
             syncing: AtomicBool::new(false),
             pending_open: Mutex::new(None),
+            chat_run: Mutex::new(None),
         };
         Ok(state)
     }

@@ -213,6 +213,18 @@ pub fn run() {
             tutor::lab_generate,
             tutor::lab_delete,
             tutor::lab_export,
+            tutor::chat_send,
+            tutor::chat_cancel,
+            tutor::chat_history,
+            tutor::chat_history_append,
+            tutor::chat_history_clear,
+            tutor::chat_book_status,
+            tutor::lab_chat_send,
+            tutor::lab_chat_history,
+            tutor::lab_chat_history_append,
+            tutor::lab_chat_history_clear,
+            tutor::lab_proposal_apply,
+            tutor::lab_undo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BiblioChad");

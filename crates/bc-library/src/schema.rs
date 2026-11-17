@@ -157,6 +157,46 @@ CREATE TABLE lab_guides(
   updated_at INTEGER NOT NULL
 );
 "#,
+    r#"
+-- Book chat (BC-4): one local-only conversation per book. Like zone
+-- maps and lab guides this is never part of the Drive sync file.
+CREATE TABLE book_chat_messages(
+  id TEXT PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  locator_json TEXT,
+  label TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  context_mode TEXT NOT NULL DEFAULT 'passage' CHECK (context_mode IN ('passage', 'book')),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX book_chat_book ON book_chat_messages(book_id, created_at);
+"#,
+    r#"
+-- Lab co-pilot (BC-5): a lab-scoped chat per book, separate from book
+-- chat, plus the single previous lab-guide revision kept for one-step
+-- Undo after an applied co-pilot edit. Local only, never Drive-synced.
+CREATE TABLE lab_chat_messages(
+  id TEXT PRIMARY KEY,
+  book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  lab_index INTEGER NOT NULL DEFAULT 0,
+  step_index INTEGER,
+  label TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX lab_chat_book ON lab_chat_messages(book_id, created_at);
+
+CREATE TABLE lab_revisions(
+  book_id INTEGER PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+  guide_json TEXT NOT NULL,
+  model TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+"#,
 ];
 
 pub fn migrate(conn: &Connection) -> Result<()> {

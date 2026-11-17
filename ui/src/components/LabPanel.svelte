@@ -8,8 +8,13 @@
   import { api, errorMessage, labDiagrams, type LabDiagram, type LabGuideRecord, type TutorStatus } from '../lib/api'
   import { toasts } from '../lib/toast.svelte'
   import { timeAgo } from '../lib/util'
+  import LabChatPanel from './LabChatPanel.svelte'
 
-  let { bookId, bookTitle }: { bookId: number; bookTitle: string } = $props()
+  let {
+    bookId,
+    bookTitle,
+    onOpenLearningSettings,
+  }: { bookId: number; bookTitle: string; onOpenLearningSettings?: () => void } = $props()
 
   let status = $state<TutorStatus | null>(null)
   let record = $state<LabGuideRecord | null>(null)
@@ -21,6 +26,9 @@
   let currentLab = $state(0)
   let revealed = $state<Record<string, boolean>>({})
   let done = $state<Set<string>>(new Set())
+  let hasUndo = $state(false)
+  let chatOpen = $state(false)
+  let chatAttachment = $state<{ labIndex: number; stepIndex: number | null }>({ labIndex: 0, stepIndex: null })
 
   const storageKey = () => `bibliochad-lab-progress-${bookId}`
   const guide = $derived(record?.guide ?? null)
@@ -69,6 +77,7 @@
       status = s
       record = o.lab
       stale = o.stale
+      hasUndo = !!o.has_undo
     } catch (e) {
       error = errorMessage(e)
     }
@@ -81,6 +90,7 @@
     try {
       record = await api.labGenerate(bookId, labCount, focus.trim() || null)
       stale = false
+      hasUndo = false
       currentLab = 0
       revealed = {}
       toasts.push('success', 'Labs built and saved with this book.')
@@ -97,6 +107,8 @@
       await api.labDelete(bookId)
       record = null
       stale = false
+      hasUndo = false
+      chatOpen = false
       currentLab = 0
     } catch (e) {
       toasts.push('error', errorMessage(e))
@@ -112,6 +124,36 @@
     try {
       await api.labExport(bookId, dest)
       toasts.push('success', 'Labs exported as Markdown.')
+    } catch (e) {
+      toasts.push('error', errorMessage(e))
+    }
+  }
+
+  // Lab co-pilot (BC-5): opening the chat sends nothing; the chosen
+  // lab/step is attached when the reader presses Send there.
+  function askAbout(labIndex: number, stepIndex: number | null) {
+    chatAttachment = { labIndex, stepIndex }
+    chatOpen = true
+  }
+
+  function onLabApplied(next: LabGuideRecord) {
+    // Edits replace steps in place, so tick keys ("lab:step") still point
+    // at the same steps and ticks survive untouched.
+    record = next
+    hasUndo = true
+  }
+
+  async function undoEdit() {
+    try {
+      const restored = await api.labUndo(bookId)
+      if (restored) {
+        record = restored
+        hasUndo = false
+        toasts.push('success', 'Lab edit undone — the previous version is back.')
+      } else {
+        hasUndo = false
+        toasts.push('info', 'There is no lab edit to undo.')
+      }
     } catch (e) {
       toasts.push('error', errorMessage(e))
     }
@@ -169,6 +211,8 @@
       </div>
       {#if guide && record}
         <div class="toolbar">
+          <button class="small-btn" onclick={() => askAbout(currentLab, null)}>Ask the lab co-pilot</button>
+          {#if hasUndo}<button class="small-btn" onclick={undoEdit}>Undo lab edit</button>{/if}
           <button class="small-btn" onclick={exportMd}>Export Markdown</button>
           <button class="small-btn" disabled={busy} onclick={generate}>{busy ? 'Rebuilding…' : 'Rebuild labs'}</button>
           <button class="ghost small-btn" onclick={remove}>Delete</button>
@@ -180,6 +224,7 @@
       <div class="notice">
         <strong>Add an API key to start.</strong>
         <p>Open <em>Settings → Learning assistant</em> and paste a key from Anthropic or another LLM provider. Labs use the same key as the Learning zone.</p>
+        {#if onOpenLearningSettings}<button class="primary" onclick={onOpenLearningSettings}>Open Settings → Learning assistant</button>{/if}
       </div>
     {/if}
 
@@ -257,6 +302,7 @@
               {#if lab.estimated_minutes} · about {lab.estimated_minutes} minutes{/if}
               {#if lab.source_refs.length} · In the book: {lab.source_refs.join('; ')}{/if}
             </p>
+            <p><button class="ghost small-btn" onclick={() => askAbout(currentLab, null)}>Ask about this lab</button></p>
             {#if lab.objective}<p class="objective">{lab.objective}</p>{/if}
             {#if lab.deliverable}<p><strong>You will produce:</strong> {lab.deliverable}</p>{/if}
             {#if lab.concepts.length}<p class="muted small">Concepts: {lab.concepts.join(', ')}</p>{/if}
@@ -351,6 +397,7 @@
                   {#if step.why}<p><span class="tag">Why</span> {step.why}</p>{/if}
                   {#if step.expected}<p><span class="tag">You should see</span> {step.expected}</p>{/if}
                   {#if step.tip}<p class="muted"><span class="tag">Tip</span> {step.tip}</p>{/if}
+                  <p><button class="ghost small-btn" onclick={() => askAbout(currentLab, j)}>Ask about this step</button></p>
                 </li>
               {/each}
             </ol>
@@ -396,6 +443,18 @@
           {/if}
         </article>
       </div>
+
+      {#if chatOpen}
+        <LabChatPanel
+          {bookId}
+          guide={guide}
+          attachment={chatAttachment}
+          ticked={[...done]}
+          onApplied={onLabApplied}
+          {onOpenLearningSettings}
+          onClose={() => (chatOpen = false)}
+        />
+      {/if}
 
       <p class="muted tiny">
         Generated from the book text by your chosen provider. Answers and commands can be wrong; check them

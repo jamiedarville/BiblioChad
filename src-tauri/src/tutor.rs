@@ -1,19 +1,25 @@
 //! Learning assistant commands: provider settings, per-book learner
 //! profiles, and Zone of Proximal Development maps.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
 
 use bc_core::{BookFormat, Locator};
 use bc_drive::TokenStore;
-use bc_library::{lab_fingerprint, LabGuideRecord, Library, ZoneFeedback, ZoneMap, ZoneProfile};
+use bc_library::{
+    lab_fingerprint, BookChatMessage, LabChatMessage, LabGuideRecord, Library, ZoneFeedback,
+    ZoneMap, ZoneProfile,
+};
 use bc_tutor::{
-    EarlierZone, LabRequest, Learner, Provider, ReaderMark, Tutor, TutorConfig, ZoneRequest,
+    ChatMessage, ChatRequest, EarlierZone, LabRequest, Learner, Provider, ReaderMark, Tutor,
+    TutorConfig, ZoneRequest,
 };
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::error::{CmdError, CmdResult};
-use crate::state::AppState;
+use crate::state::{AppState, ChatRun};
 
 const CONFIG_KEY: &str = "tutor_config";
 const KEY_HINT_KEY: &str = "tutor_key_hint";
@@ -319,6 +325,8 @@ pub struct LabOverview {
     pub lab: Option<LabGuideRecord>,
     /// The saved guide was built from a different version of the book file.
     pub stale: bool,
+    /// A one-step Undo revision from an applied co-pilot edit exists.
+    pub has_undo: bool,
 }
 
 fn current_fingerprint(state: &AppState, id: i64) -> CmdResult<String> {
@@ -333,7 +341,12 @@ pub fn lab_overview(state: State<'_, AppState>, id: i64) -> CmdResult<LabOvervie
         Some(l) => l.fingerprint != current_fingerprint(&state, id)?,
         None => false,
     };
-    Ok(LabOverview { lab, stale })
+    let has_undo = state.lib.has_lab_revision(id)?;
+    Ok(LabOverview {
+        lab,
+        stale,
+        has_undo,
+    })
 }
 
 #[tauri::command]
@@ -490,4 +503,533 @@ pub async fn lab_generate(
     Ok(state
         .lib
         .save_lab_guide(id, &guide, &out.model, &fingerprint)?)
+}
+
+// ------------------------------------------------------------------ chat (BC-2)
+
+/// One streamed chunk, emitted as the `chat-delta` event. Consumers must
+/// ignore events whose `run_id` is not the run they started.
+#[derive(Serialize, Clone)]
+pub struct ChatDelta {
+    pub run_id: String,
+    pub book_id: i64,
+    pub text: String,
+}
+
+#[derive(Serialize)]
+pub struct ChatReplyOut {
+    pub run_id: String,
+    /// Full authoritative reply text (a missed event never loses it).
+    pub text: String,
+    pub model: String,
+    /// The provider cut the answer off; `text` is the partial reply.
+    pub truncated: bool,
+    /// The context mode that was actually used ("passage" | "book").
+    pub context_mode: String,
+    /// Whole-book context was sampled because the book is long.
+    pub context_sampled: bool,
+    /// Characters of book context available before sampling/clipping.
+    pub context_chars: usize,
+}
+
+/// Send one chat turn and stream the reply. The ONLY command that talks
+/// to the provider for chat: opening a book or panel sends nothing.
+/// `history` ends with the new user message. `context_mode` is
+/// "passage" (on-screen text: UI-supplied for EPUB, page±1 read here
+/// for PDF) or "book" (whole-book text, sampled in bc-tutor).
+/// Deltas arrive as `chat-delta` events; the return value is final.
+/// Cancel with `chat_cancel`; starting a new run cancels the old one.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn chat_send(
+    app: AppHandle,
+    id: i64,
+    locator: Locator,
+    label: String,
+    passage: Option<String>,
+    context_mode: String,
+    history: Vec<ChatMessage>,
+    run_id: String,
+    outline: Option<String>,
+) -> CmdResult<ChatReplyOut> {
+    if run_id.trim().is_empty() {
+        return Err(CmdError::invalid("chat_send needs a run_id."));
+    }
+    if context_mode != "passage" && context_mode != "book" {
+        return Err(CmdError::invalid(
+            "context_mode must be \"passage\" or \"book\".",
+        ));
+    }
+    let book_path = if context_mode == "book" {
+        Some(crate::books::ensure_local(&app, id).await?)
+    } else {
+        None
+    };
+    let app2 = app.clone();
+    let loc2 = locator.clone();
+    let (req, tutor, sampled, context_chars) = crate::commands::blocking(move || {
+        let state = app2.state::<AppState>();
+        let tutor = tutor(&state)?;
+        let src = state.lib.book_source(id)?;
+        let summary = state.lib.book_summary(id)?;
+        let mut outline = outline.unwrap_or_default();
+        let (context, sampled) = if let Some(path) = &book_path {
+            let (full, toc, _pages) = extract_book_text(&state, id, path, src.format)
+                .map_err(|e| {
+                    if e.kind == "lab_empty" {
+                        CmdError::new(
+                            "chat_no_text",
+                            "This book has no readable text (it may be a scan), so whole-book chat isn't available.",
+                        )
+                    } else {
+                        e
+                    }
+                })?;
+            if full.trim().is_empty() {
+                return Err(CmdError::new(
+                    "chat_no_text",
+                    "This book has no readable text (it may be a scan), so whole-book chat isn't available.",
+                ));
+            }
+            if outline.trim().is_empty() {
+                outline = toc;
+            }
+            let sampled = full.chars().count() > bc_tutor::MAX_BOOK_CHARS;
+            (full, sampled)
+        } else {
+            let text = match (&loc2, src.format) {
+                (Locator::Pdf { page, .. }, BookFormat::Pdf) => {
+                    let path = crate::commands::opened_path(&state, id)?;
+                    let count = summary
+                        .page_count
+                        .and_then(|c| u32::try_from(c).ok())
+                        .unwrap_or(page + 1);
+                    let last = count.saturating_sub(1);
+                    (page.saturating_sub(1)..=(*page + 1).min(last))
+                        .map(|p| (p, pdf_page_text(&state, &path, p)))
+                        .filter(|(_, t)| !t.trim().is_empty())
+                        .map(|(p, t)| format!("[Page {}]\n{t}", p + 1))
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                }
+                _ => passage.unwrap_or_default(),
+            };
+            (text, false)
+        };
+        let profile = state.lib.zone_profile(id)?;
+        let context_chars = context.chars().count();
+        let req = ChatRequest {
+            title: summary.title,
+            author: summary.author,
+            outline,
+            location: if label.trim().is_empty() {
+                let pct = match &loc2 {
+                    Locator::Epub { percent, .. } => *percent,
+                    Locator::Pdf { .. } => 0.0,
+                };
+                loc2.label(pct)
+            } else {
+                label
+            },
+            context,
+            context_sampled: sampled,
+            learner: Learner {
+                background: profile.background,
+                goal: profile.goal,
+                stretch: profile.stretch,
+            },
+            history,
+            system_override: None,
+        };
+        Ok((req, tutor, sampled, context_chars))
+    })
+    .await?;
+    run_chat_stream(
+        app,
+        id,
+        run_id,
+        tutor,
+        req,
+        context_mode,
+        sampled,
+        context_chars,
+    )
+    .await
+}
+
+/// Shared streaming tail for book chat and lab chat: registers the run
+/// (cancelling any previous one), streams coalesced `chat-delta`
+/// events, and resolves with the authoritative full reply.
+#[allow(clippy::too_many_arguments)]
+async fn run_chat_stream(
+    app: AppHandle,
+    id: i64,
+    run_id: String,
+    tutor: Tutor,
+    req: ChatRequest,
+    context_mode: String,
+    sampled: bool,
+    context_chars: usize,
+) -> CmdResult<ChatReplyOut> {
+    // Register this run, cancelling any previous one.
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let state = app.state::<AppState>();
+        let mut slot = state.chat_run.lock().unwrap();
+        if let Some(old) = slot.take() {
+            old.cancel();
+        }
+        *slot = Some(ChatRun {
+            run_id: run_id.clone(),
+            cancelled: cancelled.clone(),
+            abort: None,
+        });
+    }
+
+    let pending: Arc<StdMutex<(String, Instant)>> =
+        Arc::new(StdMutex::new((String::new(), Instant::now())));
+    let emit_pending = {
+        let app = app.clone();
+        let pending = pending.clone();
+        let run_id = run_id.clone();
+        move || {
+            let mut p = pending.lock().unwrap();
+            if !p.0.is_empty() {
+                let text = std::mem::take(&mut p.0);
+                p.1 = Instant::now();
+                let _ = app.emit(
+                    "chat-delta",
+                    ChatDelta {
+                        run_id: run_id.clone(),
+                        book_id: id,
+                        text,
+                    },
+                );
+            }
+        }
+    };
+    let flush = emit_pending.clone();
+    let cancelled2 = cancelled.clone();
+    let task = tokio::spawn(async move {
+        let result = tutor
+            .chat_stream(&req, |delta| {
+                if cancelled2.load(Ordering::SeqCst) {
+                    return false;
+                }
+                // Coalesce: emit at most every 80ms or 64 chars.
+                let due = {
+                    let mut p = pending.lock().unwrap();
+                    p.0.push_str(delta);
+                    p.0.len() >= 64 || p.1.elapsed() >= Duration::from_millis(80)
+                };
+                if due {
+                    emit_pending();
+                }
+                true
+            })
+            .await;
+        flush();
+        result
+    });
+    {
+        let state = app.state::<AppState>();
+        let mut slot = state.chat_run.lock().unwrap();
+        if let Some(run) = slot.as_mut().filter(|r| r.run_id == run_id) {
+            run.abort = Some(task.abort_handle());
+        }
+    }
+
+    let joined = task.await;
+    {
+        let state = app.state::<AppState>();
+        let mut slot = state.chat_run.lock().unwrap();
+        if slot.as_ref().map(|r| r.run_id.as_str()) == Some(run_id.as_str()) {
+            *slot = None;
+        }
+    }
+    match joined {
+        Ok(Ok(reply)) => Ok(ChatReplyOut {
+            run_id,
+            text: reply.text,
+            model: reply.model,
+            truncated: reply.truncated,
+            context_mode,
+            context_sampled: sampled,
+            context_chars,
+        }),
+        Ok(Err(e)) => Err(e.into()),
+        Err(join) if join.is_cancelled() || cancelled.load(Ordering::SeqCst) => {
+            Err(CmdError::new("cancelled", "Cancelled."))
+        }
+        Err(join) => Err(CmdError::internal(join.to_string())),
+    }
+}
+
+/// Cancel the in-flight chat run with this `run_id` (no-op if it already
+/// finished). The pending `chat_send` resolves with kind "cancelled";
+/// text already delivered via `chat-delta` events stays with the UI.
+#[tauri::command]
+pub fn chat_cancel(state: State<'_, AppState>, run_id: String) -> CmdResult<()> {
+    let slot = state.chat_run.lock().unwrap();
+    if let Some(run) = slot.as_ref().filter(|r| r.run_id == run_id) {
+        run.cancel();
+    }
+    Ok(())
+}
+
+// ------------------------------------------------------------- chat history (BC-4)
+// Local-only persistence: rows live in bc-library's book_chat_messages
+// and are never part of the Drive sync file. Explain (BC-3) does not
+// write here; only the book chat panel appends.
+
+/// A book's saved chat, oldest first (most recent 500 messages).
+#[tauri::command]
+pub fn chat_history(state: State<'_, AppState>, id: i64) -> CmdResult<Vec<BookChatMessage>> {
+    Ok(state.lib.book_chat_messages(id, 500)?)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn chat_history_append(
+    state: State<'_, AppState>,
+    id: i64,
+    role: String,
+    content: String,
+    locator: Option<Locator>,
+    label: String,
+    model: String,
+    context_mode: String,
+) -> CmdResult<BookChatMessage> {
+    Ok(state.lib.add_book_chat_message(
+        id,
+        &role,
+        &content,
+        locator.as_ref(),
+        &label,
+        &model,
+        &context_mode,
+    )?)
+}
+
+/// Delete a book's saved chat (other books untouched).
+#[tauri::command]
+pub fn chat_history_clear(state: State<'_, AppState>, id: i64) -> CmdResult<usize> {
+    Ok(state.lib.clear_book_chat(id)?)
+}
+
+#[derive(Serialize)]
+pub struct ChatBookStatus {
+    /// Whole-book chat can be used for this book.
+    pub available: bool,
+    /// The book is long, so whole-book context will be sampled.
+    pub sampled: bool,
+    /// Characters of readable book text found.
+    pub chars: usize,
+    /// Why whole-book chat is unavailable, when it is.
+    pub reason: Option<String>,
+}
+
+/// Can this book be chatted about as a whole? Extracts the book text on
+/// this device only (nothing is sent anywhere); the UI calls this when
+/// the reader picks whole-book mode so scanned/no-text books disable
+/// that mode with an explanation instead of failing at send time.
+#[tauri::command]
+pub async fn chat_book_status(app: AppHandle, id: i64) -> CmdResult<ChatBookStatus> {
+    let path = crate::books::ensure_local(&app, id).await?;
+    crate::commands::blocking(move || {
+        let state = app.state::<AppState>();
+        let src = state.lib.book_source(id)?;
+        match extract_book_text(&state, id, &path, src.format) {
+            Ok((full, _toc, _pages)) if !full.trim().is_empty() => Ok(ChatBookStatus {
+                available: true,
+                sampled: full.chars().count() > bc_tutor::MAX_BOOK_CHARS,
+                chars: full.chars().count(),
+                reason: None,
+            }),
+            Ok(_) => Ok(ChatBookStatus {
+                available: false,
+                sampled: false,
+                chars: 0,
+                reason: Some(
+                    "This book has no readable text (it may be a scan), so whole-book chat isn't available."
+                        .into(),
+                ),
+            }),
+            Err(e) if e.kind == "lab_empty" => Ok(ChatBookStatus {
+                available: false,
+                sampled: false,
+                chars: 0,
+                reason: Some(
+                    "This book has no readable text (it may be a scan), so whole-book chat isn't available."
+                        .into(),
+                ),
+            }),
+            Err(e) => Err(e),
+        }
+    })
+    .await
+}
+
+// ------------------------------------------------------------- lab co-pilot (BC-5)
+// Lab-scoped chat: clarify/troubleshoot by default (never mutates the
+// saved guide); edits arrive as structured proposals in the reply and
+// are persisted only by `lab_proposal_apply` on reader confirmation.
+
+/// Send one lab-chat turn with the chosen lab/step pre-attached (steps,
+/// commands, Mermaid source, checks, ticked state) plus book metadata,
+/// outline and bounded sampled excerpts. Streams `chat-delta` like
+/// book chat; cancel with `chat_cancel`. Nothing is sent until called.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn lab_chat_send(
+    app: AppHandle,
+    id: i64,
+    lab_index: usize,
+    step_index: Option<usize>,
+    history: Vec<ChatMessage>,
+    run_id: String,
+    ticked: Vec<String>,
+    outline: Option<String>,
+) -> CmdResult<ChatReplyOut> {
+    if run_id.trim().is_empty() {
+        return Err(CmdError::invalid("lab_chat_send needs a run_id."));
+    }
+    let path = crate::books::ensure_local(&app, id).await.ok();
+    let app2 = app.clone();
+    let (req, tutor, context_chars) = crate::commands::blocking(move || {
+        let state = app2.state::<AppState>();
+        let tutor = tutor(&state)?;
+        let src = state.lib.book_source(id)?;
+        let summary = state.lib.book_summary(id)?;
+        let record = state
+            .lib
+            .lab_guide(id)?
+            .ok_or_else(|| CmdError::new("lab_missing", "Build the labs for this book first."))?;
+        let guide: bc_tutor::LabGuide =
+            serde_json::from_value(record.guide).map_err(|e| CmdError::internal(e.to_string()))?;
+        let profile = state.lib.zone_profile(id)?;
+        let learner = Learner {
+            background: profile.background,
+            goal: profile.goal,
+            stretch: profile.stretch,
+        };
+        // Book excerpts are a bonus: a scanned/unreadable book still gets
+        // lab help from the saved guide alone.
+        let (excerpt, toc) = match &path {
+            Some(p) => match extract_book_text(&state, id, p, src.format) {
+                Ok((full, toc, _)) => (
+                    bc_tutor::sample_book_text(&full, bc_tutor::LAB_CHAT_EXCERPT_CHARS),
+                    toc,
+                ),
+                Err(_) => (String::new(), String::new()),
+            },
+            None => (String::new(), String::new()),
+        };
+        let outline = {
+            let o = outline.unwrap_or_default();
+            if o.trim().is_empty() {
+                toc
+            } else {
+                o
+            }
+        };
+        let context = bc_tutor::build_lab_context(
+            &guide, lab_index, step_index, &ticked, &outline, &excerpt, &learner,
+        )
+        .map_err(CmdError::from)?;
+        let location = match (guide.labs.get(lab_index), step_index) {
+            (Some(lab), Some(si)) => {
+                format!("Lab {} ({}) · Step {}", lab_index + 1, lab.title, si + 1)
+            }
+            (Some(lab), None) => format!("Lab {} ({})", lab_index + 1, lab.title),
+            _ => format!("Lab {}", lab_index + 1),
+        };
+        let context_chars = context.chars().count();
+        let req = ChatRequest {
+            title: summary.title,
+            author: summary.author,
+            outline,
+            location,
+            context,
+            context_sampled: false,
+            learner,
+            history,
+            system_override: Some(bc_tutor::lab_chat_system_prompt()),
+        };
+        Ok((req, tutor, context_chars))
+    })
+    .await?;
+    run_chat_stream(
+        app,
+        id,
+        run_id,
+        tutor,
+        req,
+        "lab".into(),
+        false,
+        context_chars,
+    )
+    .await
+}
+
+/// A book's saved lab chat, oldest first (local-only; separate from book chat).
+#[tauri::command]
+pub fn lab_chat_history(state: State<'_, AppState>, id: i64) -> CmdResult<Vec<LabChatMessage>> {
+    Ok(state.lib.lab_chat_messages(id, 500)?)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn lab_chat_history_append(
+    state: State<'_, AppState>,
+    id: i64,
+    role: String,
+    content: String,
+    lab_index: i64,
+    step_index: Option<i64>,
+    label: String,
+    model: String,
+) -> CmdResult<LabChatMessage> {
+    Ok(state
+        .lib
+        .add_lab_chat_message(id, &role, &content, lab_index, step_index, &label, &model)?)
+}
+
+/// Delete a book's lab chat only; its book chat is untouched.
+#[tauri::command]
+pub fn lab_chat_history_clear(state: State<'_, AppState>, id: i64) -> CmdResult<usize> {
+    Ok(state.lib.clear_lab_chat(id)?)
+}
+
+/// Apply a reader-confirmed lab-edit proposal. Re-validates against the
+/// *current* saved guide and refuses atomically (nothing written) when
+/// invalid; on success the previous guide becomes the Undo revision.
+#[tauri::command]
+pub fn lab_proposal_apply(
+    state: State<'_, AppState>,
+    id: i64,
+    proposal: serde_json::Value,
+) -> CmdResult<LabGuideRecord> {
+    let proposal: bc_tutor::LabProposal = serde_json::from_value(proposal).map_err(|e| {
+        CmdError::new(
+            "invalid",
+            format!("That lab edit isn't in the expected format, so nothing was changed: {e}"),
+        )
+    })?;
+    let record = state
+        .lib
+        .lab_guide(id)?
+        .ok_or_else(|| CmdError::new("lab_missing", "Build the labs for this book first."))?;
+    let guide: bc_tutor::LabGuide =
+        serde_json::from_value(record.guide).map_err(|e| CmdError::internal(e.to_string()))?;
+    let next = bc_tutor::apply_proposal(&guide, &proposal).map_err(CmdError::from)?;
+    let value = serde_json::to_value(&next).map_err(|e| CmdError::internal(e.to_string()))?;
+    Ok(state.lib.apply_lab_edit(id, &value)?)
+}
+
+/// Undo the most recent applied co-pilot edit (one step). Returns the
+/// restored record, or `None` when there is nothing to undo.
+#[tauri::command]
+pub fn lab_undo(state: State<'_, AppState>, id: i64) -> CmdResult<Option<LabGuideRecord>> {
+    Ok(state.lib.undo_lab_edit(id)?)
 }

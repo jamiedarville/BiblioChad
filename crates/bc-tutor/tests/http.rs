@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use bc_tutor::{LabRequest, Learner, Provider, Tutor, TutorConfig, TutorError, ZoneRequest};
+use bc_tutor::{
+    ChatMessage, ChatRequest, LabRequest, Learner, Provider, Tutor, TutorConfig, TutorError,
+    ZoneRequest,
+};
 use serde_json::{json, Value};
 use wiremock::matchers::{header, header_exists, method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -295,6 +298,181 @@ async fn anthropic_labs_shape_and_parse() {
         .generate_labs(&empty)
         .await
         .is_err());
+}
+
+fn chat_req() -> ChatRequest {
+    ChatRequest {
+        title: "Economics".into(),
+        location: "page 3".into(),
+        context: "Every choice has a cost.".into(),
+        history: vec![
+            ChatMessage::user("What is opportunity cost?"),
+            ChatMessage::assistant("The best alternative you give up."),
+            ChatMessage::user("Give me an example."),
+        ],
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn anthropic_chat_stream_shape_and_deltas() {
+    let server = MockServer::start().await;
+    let sse = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"An hour \"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"of reading.\"}}\n\n",
+        "event: message_delta\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\n",
+        "event: message_stop\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    );
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(move |r: &Request| {
+            let body: Value = serde_json::from_slice(&r.body).unwrap();
+            assert_eq!(body["stream"], true);
+            let roles: Vec<&str> = body["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|m| m["role"].as_str().unwrap())
+                .collect();
+            // Context merges into the first user turn; turns alternate.
+            assert_eq!(roles, vec!["user", "assistant", "user"]);
+            assert!(body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains("Every choice"));
+            ResponseTemplate::new(200).set_body_raw(sse, "text/event-stream")
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut deltas = Vec::new();
+    let out = tutor(&server, Provider::Anthropic, "")
+        .chat_stream(&chat_req(), |d| {
+            deltas.push(d.to_string());
+            true
+        })
+        .await
+        .unwrap();
+    assert_eq!(out.text, "An hour of reading.");
+    assert_eq!(out.model, "claude-opus-5-5");
+    assert!(!out.truncated);
+    assert_eq!(deltas.join(""), out.text);
+}
+
+#[tokio::test]
+async fn openai_chat_stream_and_cancel() {
+    let server = MockServer::start().await;
+    let sse = concat!(
+        "data: {\"model\":\"local-model\",\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: [DONE]\n\n",
+    );
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(move |r: &Request| {
+            let body: Value = serde_json::from_slice(&r.body).unwrap();
+            assert_eq!(body["stream"], true);
+            assert_eq!(body["messages"][0]["role"], "system");
+            assert!(body.get("max_tokens").is_none());
+            ResponseTemplate::new(200).set_body_raw(sse, "text/event-stream")
+        })
+        .expect(2)
+        .mount(&server)
+        .await;
+    let t = tutor(&server, Provider::OpenaiCompatible, "local-model");
+    let out = t.chat_stream(&chat_req(), |_| true).await.unwrap();
+    assert_eq!(out.text, "Hello");
+    // Cancelling on the first delta: no retry after output (expect(2)
+    // total over both calls proves it).
+    let e = t.chat_stream(&chat_req(), |_| false).await.unwrap_err();
+    assert!(matches!(e, TutorError::Cancelled));
+    assert_eq!(e.kind(), "cancelled");
+}
+
+#[tokio::test]
+async fn stream_falls_back_to_plain_json_reply() {
+    let server = MockServer::start().await;
+    Mock::given(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "model": "local-model",
+            "choices": [{ "finish_reason": "stop", "message": { "content": "Whole reply." } }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mut deltas = Vec::new();
+    let out = tutor(&server, Provider::OpenaiCompatible, "local-model")
+        .chat_stream(&chat_req(), |d| {
+            deltas.push(d.to_string());
+            true
+        })
+        .await
+        .unwrap();
+    assert_eq!(out.text, "Whole reply.");
+    assert_eq!(deltas, vec!["Whole reply."]);
+}
+
+#[tokio::test]
+async fn chat_stream_retries_before_first_delta() {
+    let server = MockServer::start().await;
+    Mock::given(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(529).set_body_json(json!({
+            "type": "error", "error": { "type": "overloaded_error", "message": "Overloaded" }
+        })))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            concat!(
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"OK\"}}\n\n",
+                "data: {\"type\":\"message_stop\"}\n\n",
+            ),
+            "text/event-stream",
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let out = tutor(&server, Provider::Anthropic, "")
+        .chat_stream(&chat_req(), |_| true)
+        .await
+        .unwrap();
+    assert_eq!(out.text, "OK");
+}
+
+#[tokio::test]
+async fn chat_error_mapping_and_local_validation() {
+    let server = MockServer::start().await;
+    Mock::given(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "type": "error", "error": { "type": "not_found_error", "message": "model: nope" }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let t = tutor(&server, Provider::Anthropic, "nope");
+    let e = t.chat(&chat_req()).await.unwrap_err();
+    assert_eq!(e.kind(), "tutor_model");
+    // Empty / malformed history is refused before any network call.
+    let empty = ChatRequest::default();
+    assert_eq!(t.chat(&empty).await.unwrap_err().kind(), "not_configured");
+    let mut no_user_end = chat_req();
+    no_user_end.history = vec![ChatMessage::assistant("hi")];
+    assert_eq!(
+        t.chat_stream(&no_user_end, |_| true)
+            .await
+            .unwrap_err()
+            .kind(),
+        "not_configured"
+    );
 }
 
 #[tokio::test]

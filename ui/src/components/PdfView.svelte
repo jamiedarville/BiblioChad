@@ -3,6 +3,7 @@
   // bibliochad:// protocol. Only pages near the viewport are mounted.
   import { onMount } from 'svelte'
   import { api, type PdfLocator, type TextRun } from '../lib/api'
+  import { normalizePdfSelectionText } from '../lib/explain'
   import type { PdfPrefs } from '../lib/prefs.svelte'
   import { pageAt, protoUrl, renderWidth } from '../lib/util'
 
@@ -14,6 +15,9 @@
     onRelocate,
     onKey,
     onZoom,
+    onSelection,
+    onExplainRequest,
+    onTextState,
   }: {
     bookId: number
     pageSizes: [number, number][]
@@ -22,6 +26,12 @@
     onRelocate: (loc: PdfLocator, label: string) => void
     onKey: (e: KeyboardEvent) => void
     onZoom: (zoom: number) => void
+    /** Text-layer selection (BC-3 Explain); page = selection start page. */
+    onSelection?: (sel: { page: number; text: string } | null) => void
+    /** Right-click on a non-empty text-layer selection. */
+    onExplainRequest?: () => void
+    /** Whether the current page turned out to have selectable text. */
+    onTextState?: (page: number, hasText: boolean) => void
   } = $props()
 
   const GAP = 14
@@ -133,16 +143,58 @@
     queueMicrotask(() => goToPage(page))
   })
 
-  // Text layer for visible pages.
+  // Text layer for visible pages. `requested` (not a pre-seeded [])
+  // marks in-flight fetches, so textRuns[i] === [] after a fetch
+  // unambiguously means "this page has no selectable text".
+  const requested = new Set<number>()
   $effect(() => {
     if (!pdf.textLayer) return
     for (const i of visible) {
-      if (textRuns[i] === undefined) {
-        textRuns[i] = []
-        api.pdfText(bookId, i).then((runs) => (textRuns[i] = runs)).catch(() => {})
+      if (textRuns[i] === undefined && !requested.has(i)) {
+        requested.add(i)
+        api
+          .pdfText(bookId, i)
+          .then((runs) => (textRuns[i] = runs))
+          .catch(() => requested.delete(i))
       }
     }
   })
+
+  // Report whether the current page has selectable text (image-only
+  // pages resolve to []), so Explain can say so without any AI call.
+  $effect(() => {
+    const runs = textRuns[current]
+    if (runs !== undefined) onTextState?.(current, runs.length > 0)
+  })
+
+  function reportSelection() {
+    if (!onSelection) return
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return onSelection(null)
+    const range = sel.getRangeAt(0)
+    const startEl =
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.startContainer as Element)
+        : range.startContainer.parentElement
+    const pageEl = startEl?.closest<HTMLElement>('[data-page]')
+    if (!pageEl || !startEl?.closest('.text-layer')) return onSelection(null)
+    const text = normalizePdfSelectionText(sel.toString())
+    if (!text) return onSelection(null)
+    // Multi-page selections keep their full text and are attributed
+    // to the page where the selection starts.
+    onSelection({ page: Number(pageEl.dataset.page), text })
+  }
+
+  function onContextMenu(e: MouseEvent) {
+    // BC-3: right-click on a non-empty selection explains it; with no
+    // selection the right-click is left completely alone.
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !normalizePdfSelectionText(sel.toString())) return
+    if (!(e.target as Element | null)?.closest?.('.text-layer')) return
+    e.preventDefault()
+    reportSelection()
+    onExplainRequest?.()
+  }
 
   const measure = (() => {
     let ctx: CanvasRenderingContext2D | null = null
@@ -190,6 +242,9 @@
   onscroll={onScroll}
   onwheel={wheel}
   onkeydown={onKey}
+  onpointerup={() => setTimeout(reportSelection, 10)}
+  onkeyup={(e) => e.shiftKey && reportSelection()}
+  oncontextmenu={onContextMenu}
   tabindex="-1"
   role="document"
   aria-label="PDF pages"
@@ -198,7 +253,7 @@
     {#if count}
       {@const i = current}
       <div class="single" style:padding="{PAD}px">
-        <div class="page" style:width="{widths[i]}px" style:height="{heights[i]}px">
+        <div class="page" data-page={i} style:width="{widths[i]}px" style:height="{heights[i]}px">
           <img src={src(i)} alt="Page {i + 1}" draggable="false" />
           {#if pdf.textLayer && textRuns[i]}
             <div class="text-layer">
@@ -209,7 +264,7 @@
                   style:top="{r.y * 100}%"
                   style:font-size="{fs}px"
                   style:transform="scaleX({(r.w * widths[i]) / measure(r.text, fs)})">{r.text}</span
-                >
+                ><br role="presentation" />
               {/each}
             </div>
           {/if}
@@ -221,6 +276,7 @@
       {#each visible as i (i)}
         <div
           class="page abs"
+          data-page={i}
           style:top="{offsets[i]}px"
           style:width="{widths[i]}px"
           style:height="{heights[i]}px"
@@ -236,7 +292,7 @@
                   style:top="{r.y * 100}%"
                   style:font-size="{fs}px"
                   style:transform="scaleX({(r.w * widths[i]) / measure(r.text, fs)})">{r.text}</span
-                >
+                ><br role="presentation" />
               {/each}
             </div>
           {/if}

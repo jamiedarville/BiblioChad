@@ -20,6 +20,7 @@
     annotations,
     onRelocate,
     onSelection,
+    onExplainRequest,
     onShowAnnotation,
     onReady,
     onError,
@@ -32,6 +33,8 @@
     annotations: Annotation[]
     onRelocate: (loc: EpubLocator, label: string) => void
     onSelection: (sel: { cfi: string; text: string; percent: number } | null) => void
+    /** Right-click on a non-empty selection (BC-3 Explain). */
+    onExplainRequest?: () => void
     onShowAnnotation: (cfi: string) => void
     onReady: (toc: TocItem[]) => void
     onError: (msg: string) => void
@@ -148,6 +151,15 @@
           }
           doc.addEventListener('pointerup', () => setTimeout(report, 10))
           doc.addEventListener('keyup', (ev) => ev.shiftKey && report())
+          doc.addEventListener('contextmenu', (ev) => {
+            // BC-3: right-click on a non-empty selection explains it.
+            // A right-click with no selection is left completely alone.
+            const sel = doc.getSelection()
+            if (!sel || sel.isCollapsed || !sel.toString().trim()) return
+            ev.preventDefault()
+            report()
+            onExplainRequest?.()
+          })
         })
         applyStyles()
         await view.init({ lastLocation: start?.cfi ?? null, showTextStart: !start })
